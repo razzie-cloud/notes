@@ -1,0 +1,3 @@
+service,bucket,prefix
+notes,example-notes,notes/
+files,example-files,workspace/
