@@ -19,7 +19,7 @@ func TestConfig(t *testing.T) {
 	if e != nil || c.Workers != 4 || c.ScanInterval.String() != "5m0s" {
 		t.Fatal(c, e)
 	}
-	for key, value := range map[string]string{"SERVICE_PORT": "zero", "ORIGIN": "https://notes/path", "SCAN_INTERVAL": "0s", "INDEX_WORKERS": "100", "MAX_NOTE_BYTES": "0", "MAX_ATTACHMENT_BYTES": "-1", "S3_ALLOW_HTTP": "invalid", "POSTGRES_URI_FROM": "http://broker/uri"} {
+	for key, value := range map[string]string{"LANDING_ORIGIN": "https://home.example/path", "SERVICE_PORT": "zero", "ORIGIN": "https://notes/path", "SCAN_INTERVAL": "0s", "INDEX_WORKERS": "100", "MAX_NOTE_BYTES": "0", "MAX_ATTACHMENT_BYTES": "-1", "S3_ALLOW_HTTP": "invalid", "POSTGRES_URI_FROM": "http://broker/uri"} {
 		m := values()
 		m[key] = value
 		if _, e := load(m); e == nil {

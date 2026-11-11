@@ -128,3 +128,9 @@ its checks. See the [verification record](docs/verification.md).
 GitHub Actions run integration/race checks and publish tag-named GHCR images.
 
 Static [design mockups](docs/mockups/README.md) remain separate read-only fixtures.
+
+The header logo and Razzie Cloud name link to `LANDING_ORIGIN`
+(`--landing-origin`, default `https://razzie.cloud`). Set this to the exact
+HTTP(S) origin of your landing page, without a trailing slash. The adjacent
+service name opens this app. Compose and Swarm set the landing origin for their
+local/public domain.

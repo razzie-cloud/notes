@@ -1,6 +1,9 @@
 package app
 
 import (
+	"bytes"
+	"github.com/razzie-cloud/notes/internal/config"
+	"github.com/razzie-cloud/notes/internal/store"
 	"strings"
 	"testing"
 
@@ -49,5 +52,24 @@ func TestEditorMetadataRoundTrip(t *testing.T) {
 	}
 	if _, err = composeMarkdown("[not, a, mapping]", "body", "title", ""); err == nil {
 		t.Fatal("non-mapping front matter accepted")
+	}
+}
+
+func TestHeaderHomeLinks(t *testing.T) {
+	a, err := New(config.Config{LandingOrigin: "http://localhost:9191"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, notebook := range []string{"", "selected-notebook"} {
+		var html bytes.Buffer
+		data := View{LandingOrigin: a.Config.LandingOrigin, StorageNeeded: true, Notebook: store.Notebook{ID: notebook}}
+		if err := a.templates.ExecuteTemplate(&html, "page", data); err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{`class="brand" href="http://localhost:9191/"`, `class="service-name" href="/?notebook=` + notebook + `">Notes</a>`} {
+			if !strings.Contains(html.String(), want) {
+				t.Fatalf("missing header link %s", want)
+			}
+		}
 	}
 }

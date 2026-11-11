@@ -14,6 +14,7 @@ import (
 )
 
 type Config struct {
+	LandingOrigin                                            string
 	Port, Origin, PostgresURI, PostgresURIFrom, PasswordFile string
 	PrivateEndpoints                                         string
 	AllowHTTP                                                bool
@@ -34,6 +35,7 @@ func Load(args []string, env func(string) string) (Config, error) {
 		f.StringVar(p, flagName, v, key)
 	}
 	str(&c.Port, "port", "SERVICE_PORT", "8080")
+	str(&c.LandingOrigin, "landing-origin", "LANDING_ORIGIN", "https://razzie.cloud")
 	str(&c.Origin, "origin", "ORIGIN", "http://localhost:8080")
 	str(&c.PostgresURI, "postgres-uri", "POSTGRES_URI", "")
 	str(&c.PostgresURIFrom, "postgres-uri-from", "POSTGRES_URI_FROM", "")
@@ -51,6 +53,10 @@ func Load(args []string, env func(string) string) (Config, error) {
 	f.BoolVar(&c.AllowHTTP, "s3-allow-http", allow, "allow HTTP for exact endpoint exceptions")
 	if err = f.Parse(args); err != nil || f.NArg() != 0 {
 		return c, errors.New("invalid command-line configuration")
+	}
+	landing, landingErr := url.Parse(c.LandingOrigin)
+	if landingErr != nil || landing.Hostname() == "" || (landing.Scheme != "http" && landing.Scheme != "https") || landing.User != nil || landing.Path != "" || landing.RawQuery != "" || landing.ForceQuery || landing.Fragment != "" {
+		return c, errors.New("LANDING_ORIGIN must be an exact http(s) origin")
 	}
 	port, err := strconv.Atoi(c.Port)
 	if err != nil || port < 1 || port > 65535 {

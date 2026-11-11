@@ -492,6 +492,7 @@ func (a *App) rebuild(w http.ResponseWriter, r *http.Request) {
 }
 
 type View struct {
+	LandingOrigin                                 string
 	Notes                                         []Note
 	Tags                                          []TagCount
 	NoteTags                                      []string
@@ -517,6 +518,10 @@ type View struct {
 }
 
 func (a *App) render(w http.ResponseWriter, r *http.Request, v View, status int) {
+	v.LandingOrigin = a.Config.LandingOrigin
+	if v.LandingOrigin == "" {
+		v.LandingOrigin = "https://razzie.cloud"
+	}
 	v.User = r.Header.Get("X-Auth-Request-Name")
 	v.Notebook = a.Notebook
 	v.Notebooks = a.Notebooks
