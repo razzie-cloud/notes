@@ -47,8 +47,10 @@ if (editor) {
   });
 }
 
-const encryption = document.querySelector("#encrypted");
-if (encryption) {
+function configureEncryption() {
+  const encryption = document.querySelector("#encrypted");
+  if (!encryption || encryption.dataset.bound) return;
+  encryption.dataset.bound = "true";
   const options = document.querySelector("#crypt-options");
   const password = options.querySelector("[name=crypt_password]");
   const initialize = options.querySelector("[name=new_crypt_prefix]");
@@ -63,3 +65,6 @@ if (encryption) {
   initialize.addEventListener("change", update);
   update();
 }
+
+configureEncryption();
+document.addEventListener("htmx:afterSwap", configureEncryption);

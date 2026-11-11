@@ -28,7 +28,8 @@ needed. Stop the server with Ctrl+C.
 | Tag collections | [tags.html](tags.html) | [dark/tags.html](dark/tags.html) | [Light](tags-desktop.png) · [Dark](dark/tags-desktop.png) |
 | Notes tagged homelab | [tag.html](tag.html) | [dark/tag.html](dark/tag.html) | [Light](tag-desktop.png) · [Dark](dark/tag-desktop.png) |
 | Empty notebook | [empty.html](empty.html) | [dark/empty.html](dark/empty.html) | [Light](empty-desktop.png) · [Dark](dark/empty-desktop.png) |
-| Proposed storage setup | [storage.html](storage.html) | [dark/storage.html](dark/storage.html) | [Light](storage-desktop.png) · [Dark](dark/storage-desktop.png) |
+| Storage settings | [storage.html](storage.html) | [dark/storage.html](dark/storage.html) | [Light](storage-desktop.png) · [Dark](dark/storage-desktop.png) |
+| First connection | [storage-empty.html](storage-empty.html) | [dark/storage-empty.html](dark/storage-empty.html) | [Light](storage-empty-desktop.png) · [Dark](dark/storage-empty-desktop.png) |
 
 Mobile examples: [library](index-mobile.png), [editor](edit-mobile.png),
 [dark library](dark/index-mobile.png), [dark editor](dark/edit-mobile.png).
@@ -50,27 +51,55 @@ Mobile examples: [library](index-mobile.png), [editor](edit-mobile.png),
 - **Review save failure states** demonstrates an unavailable store and a stale
   revision while retaining the draft. Comparing revisions and retry logic belong
   to a future backend; no actual concurrency or storage error is generated.
-- **Try connection setup** shows a fixture response without contacting S3. Never
-  enter real credentials. Credential fields have no submitted names, and fixture
-  requests do not upload selected file contents.
+- Storage settings show connection cards and **Add connection**. Add and Edit
+  fetch forms with HTMX into an HTML5 `dialog`, opened with `showModal()`.
+  Edit pre-fills the selected connection's settings and leaves credentials blank.
+  Location fields are disabled on the sample connection with an attached notebook.
+  The first connection form stays inline in the empty state. Cancel, Close and
+  Escape discard the draft and return focus. Save closes the dialog and displays
+  fixture feedback with fixed sample cards; entered values are not persisted.
+- **Preview a save error** keeps the connection draft in place. Never enter real
+  credentials. Connection forms use `hx-params="none"` and unnamed fields; no
+  credential values are transmitted. Notebook attachment is a separate compact
+  plain-S3 fixture and does not create a notebook.
 - The preview banner switches themes on the same screen and opens the empty state.
   Theme switching or navigation resets unsaved mockup inputs.
 
 ## Boundaries and assets
 
-This repository has no Go service, database schema, authentication, or deployment.
-The S3/rclone direction is provisional; see [the architecture proposal](../architecture.md).
-Read-only connections, deletion, sharing, history, and advanced encryption settings
-are not modeled here. A future service needs sanitized Markdown and owner-checked
-attachment routes; this concept renders only authored static sample HTML.
+Notes now has an independent Go service. See [its architecture](../architecture.md)
+for owner-managed connections, separate notebook mappings, optional rclone crypt,
+S3 authority and derived PostgreSQL indexing. These mockups remain static sample
+artifacts, separate from live settings and content. Storage settings reflect the
+current connection fields, including conditional writes; advanced notebook crypt
+setup is outside this concept. Removal shows feedback without deleting sample
+cards. Other screens remain broader design references.
 
 `assets/` contains exact copies of Files' vendored PicoCSS, HTMX, their licenses,
 and the brand logo. `mockup.css` and `dark.css` originate from Files' design
 mockups; `notes.css` adds Notes layouts. Keep the light and dark HTML in sync.
-There is no custom JavaScript, external asset request, or package installation.
+`storage-connections.js` provides the native dialog lifecycle; HTMX fetches authored
+fixtures. There are no external asset requests or package installations.
 CSP disallows inline scripts/styles and HTMX evaluation/history snapshots are off.
 
+Storage dialog screenshots: [desktop](storage-edit-desktop.png),
+[mobile](storage-edit-mobile.png), [dark desktop](dark/storage-edit-desktop.png),
+[dark mobile](dark/storage-edit-mobile.png). Existing/empty storage screenshots
+are linked in the screen table above. The reviewed connection flow is now
+implemented in the live templates with real saves, revision checks and error
+feedback that retains the browser draft. These fixtures still simulate mutations.
+
 ## Verification
+
+The revised storage concept passed Chromium checks in both themes at 320, 390,
+768 and 1440 pixels for existing/empty states (16 layout cases). Checks covered
+Add/Edit, native modal focus, Escape/Close/Cancel, prefill, blank credentials,
+locked location fields, validation, error draft retention, simulated saves,
+removal/notebook feedback and theme round trips. No entered values were
+transmitted and no browser errors or failed responses were observed. Local
+references, unique IDs, synchronized modal assets and Git whitespace were checked;
+storage screenshots were inspected visually. The following records the earlier
+full-suite mockup pass.
 
 Headless Chromium through Playwright checked all 16 full pages at 1440×1050,
 768×1024, 390×844, and 320×800: 64 layout cases with one primary heading,
@@ -84,5 +113,5 @@ The keyboard skip link was checked. No browser console errors, page errors, or
 failed HTTP responses were observed. Local HTML/fixture references were checked,
 and the logo was compared with the parent master asset. Git whitespace checks ran.
 
-No Go checks or live authentication, PostgreSQL, S3, encryption, concurrency, or
-deployment checks apply to these static artifacts. Nothing was deployed.
+No Go checks were needed for these static artifacts. Live authentication,
+PostgreSQL, S3, encryption, concurrency and deployment were not exercised.

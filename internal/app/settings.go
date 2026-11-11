@@ -75,13 +75,17 @@ func (a *App) storagePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v := View{StoragePage: true, Connections: connections, Recoveries: recoveries, EditConnection: &store.Connection{Provider: "AWS", Region: "us-east-1", PathStyle: true, ConditionalWrites: true}}
-	if id := r.URL.Query().Get("connection"); id != "" {
+	v.ConnectionForm = r.URL.Query().Get("connection") != ""
+	if id := r.URL.Query().Get("connection"); id != "" && id != "new" {
 		c, e := a.Repo.Connection(r.Context(), owner(r), id)
 		if e != nil {
 			a.fail(w, r, e)
 			return
 		}
 		v.EditConnection = &c
+		for _, book := range books {
+			v.ConnectionLocked = v.ConnectionLocked || book.ConnectionID == c.ID
+		}
 	}
 	if id := r.URL.Query().Get("notebook"); id != "" {
 		n, e := a.Repo.Notebook(r.Context(), owner(r), id)
@@ -94,6 +98,14 @@ func (a *App) storagePage(w http.ResponseWriter, r *http.Request) {
 	a.renderStorage(w, r, v, books)
 }
 func (a *App) renderStorage(w http.ResponseWriter, r *http.Request, v View, books []store.Notebook) {
+	if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Target") == "connection-dialog-content" {
+		v.ConnectionDialog = true
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := a.templates.ExecuteTemplate(w, "connection-dialog", v); err != nil {
+			slog.Warn("Template failed", "event", "notes.render_failed")
+		}
+		return
+	}
 	child := &App{Config: a.Config, Engine: a.Engine, Repo: a.Repo, templates: a.templates, Notebooks: books}
 	child.render(w, r, v, 200)
 }
@@ -116,21 +128,21 @@ func (a *App) saveConnection(w http.ResponseWriter, r *http.Request) {
 	}
 	c := store.Connection{ID: r.PathValue("id"), Owner: owner(r), Name: strings.TrimSpace(r.PostForm.Get("name")), Provider: r.PostForm.Get("provider"), Endpoint: strings.TrimSpace(r.PostForm.Get("endpoint")), Region: strings.TrimSpace(r.PostForm.Get("region")), PathStyle: checked(r, "path_style"), ReadOnly: checked(r, "read_only"), ConditionalWrites: checked(r, "conditional_writes"), AccessKey: r.PostForm.Get("access_key"), SecretKey: r.PostForm.Get("secret_key"), SessionToken: r.PostForm.Get("session_token"), Revision: revision(r)}
 	if !store.ValidName(c.Name) || len(c.Region) > 100 || c.Region == "" || (c.Provider != "AWS" && c.Provider != "Other" && c.Provider != "Backblaze") || len(c.AccessKey) > 4096 || len(c.SecretKey) > 8192 || len(c.SessionToken) > 16384 {
-		http.Error(w, "Enter a name, provider, region and valid credentials", 422)
+		a.connectionValidation(w, r, "Enter a name, provider, region and valid credentials")
 		return
 	}
 	if c.Endpoint == "" && c.Provider != "AWS" {
-		http.Error(w, "This provider requires an S3 endpoint", 422)
+		a.connectionValidation(w, r, "This provider requires an S3 endpoint")
 		return
 	}
 	policy, e := storage.HTTPClient(c.Endpoint, a.Config.PrivateEndpoints, a.Config.AllowHTTP)
 	if e != nil {
-		http.Error(w, "Endpoint must use HTTPS; private/HTTP endpoints require operator configuration", 422)
+		a.connectionValidation(w, r, "Endpoint must use HTTPS; private/HTTP endpoints require operator configuration")
 		return
 	}
 	policy.CloseIdleConnections()
 	if c.ID == "" && (c.AccessKey == "" || c.SecretKey == "") {
-		http.Error(w, "Access key and secret key are required", 422)
+		a.connectionValidation(w, r, "Access key and secret key are required")
 		return
 	}
 	c.RetainSession = c.ID != "" && c.SessionToken == "" && !checked(r, "clear_session_token")
@@ -138,7 +150,39 @@ func (a *App) saveConnection(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, e)
 		return
 	}
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Location", `{"path":"/storage","target":"#app-layout","select":"#app-layout","swap":"outerHTML"}`)
+		return
+	}
 	http.Redirect(w, r, "/storage", 303)
+}
+
+// Keep connection drafts in the browser, including newly entered credentials.
+// Error responses contain only a safe message, never submitted or stored secrets.
+func (a *App) connectionError(w http.ResponseWriter, r *http.Request, message string, status int) bool {
+	if r.Header.Get("HX-Request") != "true" {
+		return false
+	}
+	target := r.Header.Get("HX-Target")
+	if target != "connection-feedback" && target != "connection-dialog-content" {
+		return false
+	}
+	if target == "connection-dialog-content" {
+		target = "connection-list-feedback"
+	}
+	w.Header().Set("HX-Retarget", "#"+target)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	if err := a.templates.ExecuteTemplate(w, "connection-error", View{Message: message}); err != nil {
+		slog.Warn("Template failed", "event", "notes.render_failed")
+	}
+	return true
+}
+
+func (a *App) connectionValidation(w http.ResponseWriter, r *http.Request, message string) {
+	if !a.connectionError(w, r, message, http.StatusUnprocessableEntity) {
+		http.Error(w, message, http.StatusUnprocessableEntity)
+	}
 }
 
 var bucketPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$`)

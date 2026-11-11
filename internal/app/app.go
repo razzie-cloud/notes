@@ -202,7 +202,9 @@ func (a *App) fail(w http.ResponseWriter, r *http.Request, err error) {
 	if status == 503 {
 		a.logFailure(w, r, err)
 	}
-	http.Error(w, msg, status)
+	if !a.connectionError(w, r, msg, status) {
+		http.Error(w, msg, status)
+	}
 }
 func (a *App) logFailure(w http.ResponseWriter, r *http.Request, err error) {
 	id := uuid.NewString()
@@ -521,6 +523,8 @@ type View struct {
 	StoragePage                                   bool
 	Connections                                   []store.Connection
 	EditConnection                                *store.Connection
+	ConnectionForm, ConnectionDialog              bool
+	ConnectionLocked                              bool
 	EditNotebook                                  *store.Notebook
 	Recoveries                                    []store.RecoveryInfo
 	Query, Tag, Key, Content, ETag, Message, User string

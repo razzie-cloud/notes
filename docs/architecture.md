@@ -19,6 +19,13 @@ tables, directories and credentials are never shared implicitly. The service
 starts without storage configuration. Connections are added through `/storage`;
 there is no deployment-wide bucket, provider credential or S3 secret volume.
 
+The first connection form is inline. With existing connections, Add/Edit loads
+the form through HTMX into an HTML5 dialog; direct links retain a full-page form.
+Errors update feedback while keeping the draft in the browser. Successful saves
+refresh storage settings and close the dialog. Escape and Cancel discard the
+dialog draft and restore focus. Connection locations are disabled while notebooks
+are attached, with hidden original values preserving the existing POST contract.
+
 Connection credential fields are never prefilled in HTML or returned by normal
 queries. Blank inputs preserve saved values; clearing a session token is explicit.
 Changes use revision checks. Location fields (provider, endpoint, region and
