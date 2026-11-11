@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"github.com/razzie-cloud/notes/internal/brokerdiscovery"
 	"io"
-	"net/http"
 	"net/url"
 	"os"
 	"strconv"
@@ -16,6 +16,8 @@ import (
 )
 
 type Config struct {
+	BrokerTokenFile                                          string
+	BrokerCAFile                                             string
 	AccessGatewayURL                                         string
 	LandingOrigin                                            string
 	Port, Origin, PostgresURI, PostgresURIFrom, PasswordFile string
@@ -37,6 +39,8 @@ func Load(args []string, env func(string) string) (Config, error) {
 		}
 		f.StringVar(p, flagName, v, key)
 	}
+	str(&c.BrokerTokenFile, "broker-token-file", "BROKER_TOKEN_FILE", "")
+	str(&c.BrokerCAFile, "broker-ca-file", "BROKER_CA_FILE", "")
 	str(&c.AccessGatewayURL, "access-gateway-url", "ACCESS_GATEWAY_URL", "")
 	str(&c.Port, "port", "SERVICE_PORT", "8080")
 	str(&c.LandingOrigin, "landing-origin", "LANDING_ORIGIN", "https://razzie.cloud")
@@ -106,38 +110,17 @@ func defaultValue(s, d string) string {
 
 func (c Config) DatabaseURI(ctx context.Context) (string, error) {
 	raw := c.PostgresURI
-	if c.PostgresURIFrom != "" {
-		u, e := url.Parse(c.PostgresURIFrom)
-		if e != nil || u.Host == "" || u.User != nil || (u.Scheme != "http" && u.Scheme != "https") {
-			return "", errors.New("invalid broker URL")
-		}
-		client := &http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-		for attempt := 0; attempt < 6; attempt++ {
-			req, _ := http.NewRequestWithContext(ctx, "GET", c.PostgresURIFrom, nil)
-			resp, e := client.Do(req)
-			if e == nil {
-				b, readErr := io.ReadAll(io.LimitReader(resp.Body, 4097))
-				resp.Body.Close()
-				if resp.StatusCode == 200 && readErr == nil && len(b) <= 4096 {
-					raw = strings.TrimSpace(string(b))
-					break
-				}
-				if resp.StatusCode >= 300 && resp.StatusCode < 500 {
-					return "", errors.New("broker rejected discovery")
-				}
-			}
-			if attempt == 5 {
-				return "", errors.New("broker unavailable")
-			}
-			timer := time.NewTimer(time.Duration(1<<attempt) * 200 * time.Millisecond)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return "", ctx.Err()
-			case <-timer.C:
-			}
-		}
+	if c.BrokerTokenFile != "" && c.PostgresURIFrom == "" {
+		return "", errors.New("BROKER_TOKEN_FILE requires discovery")
 	}
+	if c.PostgresURIFrom != "" {
+		v, e := brokerdiscovery.Fetch(ctx, c.PostgresURIFrom, brokerdiscovery.Options{TokenFile: c.BrokerTokenFile, CAFile: c.BrokerCAFile})
+		if e != nil {
+			return "", e
+		}
+		raw = v
+	}
+
 	u, e := url.Parse(raw)
 	if e != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") || u.Host == "" || u.User == nil || u.Path == "" {
 		return "", errors.New("invalid PostgreSQL URI")
