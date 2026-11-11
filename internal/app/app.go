@@ -93,6 +93,7 @@ func (a *App) Health(ctx context.Context) {
 func (a *App) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /storage", a.storagePage)
+	mux.HandleFunc("GET /notebooks", a.notebooksPage)
 	mux.HandleFunc("POST /connections", a.saveConnection)
 	mux.HandleFunc("POST /connections/{id}", a.saveConnection)
 	mux.HandleFunc("POST /connections/{id}/delete", a.removeConnection)
@@ -202,7 +203,7 @@ func (a *App) fail(w http.ResponseWriter, r *http.Request, err error) {
 	if status == 503 {
 		a.logFailure(w, r, err)
 	}
-	if !a.connectionError(w, r, msg, status) {
+	if !a.connectionError(w, r, msg, status) && !a.notebookError(w, r, msg, status) {
 		http.Error(w, msg, status)
 	}
 }
@@ -526,6 +527,9 @@ type View struct {
 	ConnectionForm, ConnectionDialog              bool
 	ConnectionLocked                              bool
 	EditNotebook                                  *store.Notebook
+	NotebooksPage, NotebookForm, NotebookDialog   bool
+	NotebookCards                                 []NotebookCard
+	NotebookConnection                            store.Connection
 	Recoveries                                    []store.RecoveryInfo
 	Query, Tag, Key, Content, ETag, Message, User string
 	Editing                                       bool

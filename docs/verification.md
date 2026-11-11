@@ -4,6 +4,37 @@ Verified on 2026-11-10 using Go 1.27, disposable loopback PostgreSQL 14 with dat
 under `/tmp`, random integration schemas, and in-memory S3. No production data,
 Docker context, live deployment or external provider was changed.
 
+## Separate notebook settings page (2026-11-11)
+
+The reviewed notebook concept is implemented at `/notebooks`, separately from
+Connections. Empty storage links to connection setup; the first notebook form is
+inline, while populated pages use cards and Add/Edit dialogs. Saves refresh the
+notebook list, and errors retain browser drafts. Advanced crypt options, recovery
+downloads, immutable locations, owner scoping and revision checks remain.
+
+Validation used a fresh loopback PostgreSQL cluster, random integration schemas
+and in-memory S3:
+
+- `gofmt`, `go build ./...`, `go vet ./...`, `go test ./...`, and
+  `go test -race ./...` in Notes. Regression coverage includes empty/list/fallback
+  forms, selected sidebar state, escaped metadata, creation fields, safe error
+  fragments, encrypted creation, effective read-only policy, owner isolation,
+  immutable settings, stale revisions, redirect destinations and recovery
+  retention after removal.
+- Chromium checked 48 layouts and eight complete real-handler workflows across
+  light/dark at 320, 390, 768 and 1440px. Checks covered one primary heading,
+  loaded branding, unique IDs, overflow, dialog focus/return, Cancel/Close/Escape,
+  encryption controls after swaps, validation draft retention, real saves,
+  connection location locks and recovery downloads. One deliberately aborted
+  save verified network-error draft retention. The final pass had no page or CSP
+  errors; desktop/mobile screenshots under `/tmp` were inspected visually.
+- A JavaScript-disabled Chromium context verified ordinary full-page notebook
+  create/edit/remove and fallback forms. Parent and Notes `git diff --check`
+  passed. The temporary browser harness was removed.
+
+No external storage provider, gateway login flow, image publication or deployment
+was exercised. The checked-in mockups remain separate design references.
+
 ## User-managed storage correction
 
 The operator-bucket implementation has been replaced with Files-style setup:

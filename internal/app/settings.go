@@ -3,7 +3,6 @@ package app
 import (
 	"log/slog"
 	"net/http"
-	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -25,7 +24,7 @@ func (a *App) notebook(fn func(*App, http.ResponseWriter, *http.Request)) http.H
 				if r.Method == "GET" && r.URL.Path == "/" {
 					a.render(w, r, View{StorageNeeded: true}, 200)
 				} else {
-					http.Error(w, "Add a notebook at /storage first", 409)
+					http.Error(w, "Add a notebook at /notebooks first", 409)
 				}
 				return
 			}
@@ -59,6 +58,11 @@ func (a *App) notebook(fn func(*App, http.ResponseWriter, *http.Request)) http.H
 	}
 }
 func (a *App) storagePage(w http.ResponseWriter, r *http.Request) {
+	// Preserve existing bookmarked notebook edit links with the new presentation.
+	if r.URL.Query().Get("notebook") != "" {
+		a.notebooksPage(w, r)
+		return
+	}
 	connections, e := a.Repo.Connections(r.Context(), owner(r))
 	if e != nil {
 		a.fail(w, r, e)
@@ -69,12 +73,7 @@ func (a *App) storagePage(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, e)
 		return
 	}
-	recoveries, e := a.Repo.Recoveries(r.Context(), owner(r))
-	if e != nil {
-		a.fail(w, r, e)
-		return
-	}
-	v := View{StoragePage: true, Connections: connections, Recoveries: recoveries, EditConnection: &store.Connection{Provider: "AWS", Region: "us-east-1", PathStyle: true, ConditionalWrites: true}}
+	v := View{StoragePage: true, Connections: connections, EditConnection: &store.Connection{Provider: "AWS", Region: "us-east-1", PathStyle: true, ConditionalWrites: true}}
 	v.ConnectionForm = r.URL.Query().Get("connection") != ""
 	if id := r.URL.Query().Get("connection"); id != "" && id != "new" {
 		c, e := a.Repo.Connection(r.Context(), owner(r), id)
@@ -87,14 +86,7 @@ func (a *App) storagePage(w http.ResponseWriter, r *http.Request) {
 			v.ConnectionLocked = v.ConnectionLocked || book.ConnectionID == c.ID
 		}
 	}
-	if id := r.URL.Query().Get("notebook"); id != "" {
-		n, e := a.Repo.Notebook(r.Context(), owner(r), id)
-		if e != nil {
-			a.fail(w, r, e)
-			return
-		}
-		v.EditNotebook = &n
-	}
+
 	a.renderStorage(w, r, v, books)
 }
 func (a *App) renderStorage(w http.ResponseWriter, r *http.Request, v View, books []store.Notebook) {
@@ -188,7 +180,9 @@ func (a *App) connectionValidation(w http.ResponseWriter, r *http.Request, messa
 var bucketPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$`)
 
 func (a *App) saveNotebook(w http.ResponseWriter, r *http.Request) {
-	if !form(w, r) {
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	if r.ParseForm() != nil {
+		a.notebookValidation(w, r, "Invalid notebook form")
 		return
 	}
 	if id := r.PathValue("id"); id != "" {
@@ -204,19 +198,19 @@ func (a *App) saveNotebook(w http.ResponseWriter, r *http.Request) {
 		n.Name = strings.TrimSpace(r.PostForm.Get("name"))
 		n.ReadOnly = checked(r, "read_only")
 		if !store.ValidName(n.Name) {
-			http.Error(w, "Enter a notebook name", 422)
+			a.notebookValidation(w, r, "Enter a notebook name")
 			return
 		}
 		if e = a.Repo.SaveNotebook(r.Context(), &n, store.Secrets{}); e != nil {
 			a.fail(w, r, e)
 			return
 		}
-		http.Redirect(w, r, "/storage", 303)
+		notebookSaved(w, r)
 		return
 	}
 	n := store.Notebook{Owner: owner(r), Name: strings.TrimSpace(r.PostForm.Get("name")), ConnectionID: r.PostForm.Get("connection_id"), Bucket: strings.TrimSpace(r.PostForm.Get("bucket")), Prefix: strings.TrimSuffix(strings.TrimSpace(r.PostForm.Get("prefix")), "/"), ReadOnly: checked(r, "read_only"), Encrypted: checked(r, "encrypted"), FilenameEncryption: r.PostForm.Get("filename_encryption"), FilenameEncoding: r.PostForm.Get("filename_encoding"), DirectoryEncryption: checked(r, "directory_encryption"), Suffix: r.PostForm.Get("suffix")}
 	if !store.ValidName(n.Name) || !bucketPattern.MatchString(n.Bucket) || strings.Contains(n.Bucket, "..") || (n.Prefix != "" && !storage.Path(n.Prefix)) {
-		http.Error(w, "Enter a notebook name, bucket and safe relative prefix", 422)
+		a.notebookValidation(w, r, "Enter a notebook name, bucket and safe relative prefix")
 		return
 	}
 	c, e := a.Repo.Credentials(r.Context(), owner(r), n.ConnectionID)
@@ -227,7 +221,7 @@ func (a *App) saveNotebook(w http.ResponseWriter, r *http.Request) {
 	n.ConnectionRevision = c.Revision
 	secret := store.Secrets{Password: r.PostForm.Get("crypt_password"), Password2: r.PostForm.Get("crypt_password2")}
 	if n.Encrypted && (secret.Password == "" || len(secret.Password) > 4096 || len(secret.Password2) > 4096 || (n.FilenameEncryption != "standard" && n.FilenameEncryption != "off") || (n.FilenameEncoding != "base32" && n.FilenameEncoding != "base64" && n.FilenameEncoding != "base32768") || !strings.HasPrefix(n.Suffix, ".") || len(n.Suffix) > 20 || strings.ContainsAny(n.Suffix, "/\\\x00\r\n") || !storage.Path("file"+n.Suffix)) {
-		http.Error(w, "Enter a crypt password and valid crypt options", 422)
+		a.notebookValidation(w, r, "Enter a crypt password and valid crypt options")
 		return
 	}
 	if !n.Encrypted {
@@ -251,18 +245,18 @@ func (a *App) saveNotebook(w http.ResponseWriter, r *http.Request) {
 	if n.Encrypted {
 		if checked(r, "new_crypt_prefix") {
 			if len(p.Objects) != 0 || p.Next != "" {
-				http.Error(w, "Prefix contains data. Verify an existing encrypted file instead", 422)
+				a.notebookValidation(w, r, "Prefix contains data. Verify an existing encrypted file instead")
 				return
 			}
 		} else {
 			verify := r.PostForm.Get("verify_path")
 			if !storage.Path(verify) {
-				http.Error(w, "Enter a known decrypted file path, or confirm a new empty prefix", 422)
+				a.notebookValidation(w, r, "Enter a known decrypted file path, or confirm a new empty prefix")
 				return
 			}
 			b, _, e := mapped.Get(r.Context(), owner(r)+"/"+verify, "", a.Config.MaxAttachmentBytes)
 			if e != nil || len(b) == 0 {
-				http.Error(w, "Cannot verify crypt settings with that nonempty file", 422)
+				a.notebookValidation(w, r, "Cannot verify crypt settings with that nonempty file")
 				return
 			}
 		}
@@ -278,7 +272,7 @@ func (a *App) saveNotebook(w http.ResponseWriter, r *http.Request) {
 	if e != nil {
 		slog.Warn("Notebook saved; automatic reconciliation will schedule indexing", "event", "notes.scan_enqueue_failed", "error_kind", "dependency")
 	}
-	http.Redirect(w, r, "/?notebook="+url.QueryEscape(n.ID), 303)
+	notebookSaved(w, r)
 }
 func (a *App) removeNotebook(w http.ResponseWriter, r *http.Request) {
 	if !form(w, r) {
@@ -292,7 +286,7 @@ func (a *App) removeNotebook(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, e)
 		return
 	}
-	http.Redirect(w, r, "/storage", 303)
+	http.Redirect(w, r, "/notebooks", 303)
 }
 func (a *App) removeConnection(w http.ResponseWriter, r *http.Request) {
 	if !form(w, r) {
@@ -317,4 +311,99 @@ func (a *App) recovery(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", `attachment; filename="notes-crypt-recovery.json"`)
 	w.Write(b)
+}
+
+// NotebookCard contains only owner-scoped public settings, never crypt secrets.
+type NotebookCard struct {
+	store.Notebook
+	ConnectionName                        string
+	ConnectionReadOnly, EffectiveReadOnly bool
+}
+
+func (a *App) notebooksPage(w http.ResponseWriter, r *http.Request) {
+	connections, err := a.Repo.Connections(r.Context(), owner(r))
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	books, err := a.Repo.Notebooks(r.Context(), owner(r))
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	recoveries, err := a.Repo.Recoveries(r.Context(), owner(r))
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	v := View{NotebooksPage: true, Connections: connections, Recoveries: recoveries,
+		EditNotebook: &store.Notebook{FilenameEncryption: "standard", FilenameEncoding: "base32", DirectoryEncryption: true, Suffix: ".bin"}}
+	byID := make(map[string]store.Connection, len(connections))
+	for _, c := range connections {
+		byID[c.ID] = c
+	}
+	for _, n := range books {
+		c := byID[n.ConnectionID]
+		v.NotebookCards = append(v.NotebookCards, NotebookCard{Notebook: n, ConnectionName: c.Name, ConnectionReadOnly: c.ReadOnly, EffectiveReadOnly: !n.Writable(c)})
+	}
+	id := r.URL.Query().Get("notebook")
+	v.NotebookForm = id != ""
+	if id != "" && id != "new" {
+		n, err := a.Repo.Notebook(r.Context(), owner(r), id)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		v.EditNotebook = &n
+		v.NotebookConnection = byID[n.ConnectionID]
+	}
+	a.renderNotebooks(w, r, v, books)
+}
+
+func (a *App) renderNotebooks(w http.ResponseWriter, r *http.Request, v View, books []store.Notebook) {
+	if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Target") == "notebook-dialog-content" && len(v.Connections) > 0 {
+		v.NotebookDialog = true
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := a.templates.ExecuteTemplate(w, "notebook-dialog", v); err != nil {
+			slog.Warn("Template failed", "event", "notes.render_failed")
+		}
+		return
+	}
+	child := &App{Config: a.Config, Engine: a.Engine, Repo: a.Repo, templates: a.templates, Notebooks: books}
+	child.render(w, r, v, http.StatusOK)
+}
+
+func notebookSaved(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Location", `{"path":"/notebooks","target":"#app-layout","select":"#app-layout","swap":"outerHTML"}`)
+		return
+	}
+	http.Redirect(w, r, "/notebooks", http.StatusSeeOther)
+}
+
+// Keep drafts and crypt passwords in the browser. Only safe feedback is returned.
+func (a *App) notebookError(w http.ResponseWriter, r *http.Request, message string, status int) bool {
+	if r.Header.Get("HX-Request") != "true" {
+		return false
+	}
+	target := r.Header.Get("HX-Target")
+	if target != "notebook-feedback" && target != "notebook-dialog-content" {
+		return false
+	}
+	if target == "notebook-dialog-content" {
+		target = "notebook-list-feedback"
+	}
+	w.Header().Set("HX-Retarget", "#"+target)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	if err := a.templates.ExecuteTemplate(w, "notebook-error", View{Message: message}); err != nil {
+		slog.Warn("Template failed", "event", "notes.render_failed")
+	}
+	return true
+}
+
+func (a *App) notebookValidation(w http.ResponseWriter, r *http.Request, message string) {
+	if !a.notebookError(w, r, message, http.StatusUnprocessableEntity) {
+		http.Error(w, message, http.StatusUnprocessableEntity)
+	}
 }

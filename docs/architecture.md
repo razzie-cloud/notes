@@ -26,6 +26,18 @@ refresh storage settings and close the dialog. Escape and Cancel discard the
 dialog draft and restore focus. Connection locations are disabled while notebooks
 are attached, with hidden original values preserving the existing POST contract.
 
+Notebooks have a separate sidebar page at `/notebooks`. With no notebooks, the
+first form stays inline; without a connection, the page links to connection setup.
+Existing notebooks show cards with connection, bucket/prefix, effective access,
+encryption and crypt recovery downloads. Add/Edit loads a native dialog through
+HTMX, with full-page forms available at `/notebooks?notebook=new` or an owned ID.
+The legacy `/storage?notebook=<id>` URL renders the notebook edit page as well.
+Notebook POST routes and revision checks are unchanged; successful saves return
+to `/notebooks`, refreshing its shell and closing any dialog. Errors return only
+safe feedback and keep the draft and crypt passwords in the browser. Cancel and
+Escape clear dialog drafts and restore focus. Retained recovery records live on
+the Notebooks page, including records whose mappings were removed.
+
 Connection credential fields are never prefilled in HTML or returned by normal
 queries. Blank inputs preserve saved values; clearing a session token is explicit.
 Changes use revision checks. Location fields (provider, endpoint, region and

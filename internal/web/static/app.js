@@ -56,10 +56,13 @@ function configureEncryption() {
   const initialize = options.querySelector("[name=new_crypt_prefix]");
   const verify = options.querySelector("[name=verify_path]");
   const update = () => {
+    options.hidden = !encryption.checked;
+    encryption.setAttribute("aria-expanded", String(encryption.checked));
     for (const control of options.querySelectorAll("input, select")) control.disabled = !encryption.checked;
     password.required = encryption.checked;
     verify.required = encryption.checked && !initialize.checked;
-    if (encryption.checked) options.open = true;
+    verify.disabled = !encryption.checked || initialize.checked;
+    document.getElementById("crypt-existing-file").hidden = initialize.checked;
   };
   encryption.addEventListener("change", update);
   initialize.addEventListener("change", update);

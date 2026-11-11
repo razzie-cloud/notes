@@ -11,17 +11,20 @@ or bucket are required in service environment variables or Swarm secrets.
 
 ## Set up storage
 
-1. Open **Storage → Add connection**. Choose AWS, Backblaze or another compatible
+1. Open **Connections → Add connection**. Choose AWS, Backblaze or another compatible
    provider; enter endpoint, region, path-style addressing, access/secret keys and
    an optional session token. A connection can be read-only. **Conditional writes**
    defaults on; turn it off for providers such as Backblaze that reject these
    requests. Notes then uses PostgreSQL optimistic revision checks for its own
    edits. Changes made by external clients during a save can still be overwritten.
-2. Under **Attach a notebook**, choose the connection, bucket and a dedicated
-   prefix. The notebook can also be read-only; connection policy takes precedence.
+2. Open **Notebooks** in the sidebar. The first notebook form appears inline;
+   afterward, **Add notebook** opens a dialog. Choose the connection, bucket and a
+   dedicated prefix. The notebook can also be read-only; connection policy takes
+   precedence.
 3. To encrypt, enable **Encrypt with rclone crypt** and enter the crypt password
-   and optional salt/second password. Set filename encryption, directory-name
-   encryption, encoding and suffix to match your rclone configuration.
+   and optional salt/second password. Under **Advanced encryption settings**, set
+   filename encryption, directory-name encryption, encoding and suffix to match
+   your rclone configuration.
 4. For a new encrypted notebook, confirm an **empty prefix**. Attaching existing
    encrypted data requires a known nonempty decrypted file path, such as
    `notes/example.md`, to verify the password before the mapping is saved.
@@ -34,6 +37,12 @@ fields blank to keep their values; clearing a session token has a separate switc
 Connection location fields are fixed while notebooks are attached. A notebook's
 bucket/prefix and crypt options are immutable: attach a new mapping to change them.
 A notebook removal is configuration cleanup and never deletes bucket contents.
+
+Notebook cards show their storage, effective access and encryption. **Edit notebook**
+opens a dialog for name and read-only policy. Saves return to the notebook list;
+errors retain the draft, and Cancel or Escape discards it. Direct Add/Edit links
+also support full-page forms. Recovery records remain on the Notebooks page even
+after removing their mapping.
 
 Each notebook stores Markdown at `<prefix>/notes/<path>.md` and attachments at
 `<prefix>/attachments/<path>.md/<filename>`. Encryption transparently transforms
