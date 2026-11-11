@@ -1,0 +1,54 @@
+/* Notebook settings reuse the connection cards, forms and native dialog pattern. */
+.notebook-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1.4rem; }
+.notebook-grid>* { min-width: 0; }
+.notebook-card { display: flex; flex-direction: column; }
+.notebook-card-heading { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.1rem; }
+.notebook-card-heading h2 { margin: 0 0 .25rem; }
+.notebook-card-heading p { margin: 0; font-size: .8rem; }
+.notebook-card-heading .folder-tile { flex-shrink: 0; }
+.notebook-badges { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .8rem; }
+.notebook-card .info-list { margin: 0; }
+.notebook-card .info-list dd { min-width: 0; overflow-wrap: anywhere; }
+.notebook-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; margin-top: auto; padding-top: 1.4rem; }
+.notebook-actions :is(button,[role="button"]) { display: inline-flex; margin: 0; padding: .58rem .95rem; font-size: .87rem; font-weight: 600; line-height: var(--pico-line-height); }
+.notebook-policy { margin: .8rem 0 0; color: var(--pico-muted-color); font-size: .78rem; }
+.notebook-removal { margin: 1.3rem 0 0; font-size: .85rem; }
+.notebook-removal p { margin-top: .9rem; font-size: .8rem; }
+.notebook-feedback { margin: 0 0 1.4rem; }
+.empty-notebooks { display: grid; grid-template-columns: minmax(0,680px) minmax(0,1fr); align-items: start; gap: 2rem; }
+.empty-notebooks>* { min-width: 0; }
+.empty-notebooks article>p { font-size: .85rem; margin-bottom: 1.6rem; }
+.notebook-form { margin-bottom: 0; }
+.notebook-form small { display: block; margin: -.5rem 0 1rem; font-weight: 400; }
+.notebook-form .two-column-form { gap: 1rem; }
+.notebook-form .two-column-form>* { min-width: 0; }
+.notebook-form .field-section { border-top: 1px solid var(--pico-muted-border-color); margin: .6rem 0 1rem; padding: 1.2rem 0 0; }
+.notebook-form h3 { margin-bottom: .8rem; }
+.notebook-form label:has([role="switch"]) { margin-bottom: 1rem; }
+.notebook-form details { font-size: .85rem; margin: 1rem 0; }
+.notebook-form details[open] summary { margin-bottom: 1rem; }
+.notebook-form .credential-hint { font-size: .8rem; color: var(--pico-muted-color); margin: 1rem 0; }
+.notebook-form .preview-failure { margin: .5rem 0 1rem; font-size: .75rem; }
+.notebook-location { padding: 1rem; background: var(--pico-card-sectioning-background-color); border: 1px solid var(--pico-muted-border-color); border-radius: .5rem; margin-bottom: 1.3rem; }
+.notebook-location .info-list { margin: 0; }
+.notebook-location .info-list dd { min-width: 0; }
+.notebook-location .credential-hint { margin-bottom: 0; }
+body:has(#notebook-dialog[open]) { overflow: hidden; }
+#notebook-dialog { background: transparent; backdrop-filter: none; padding: 1rem; }
+#notebook-dialog::backdrop { background: #09111bb3; backdrop-filter: blur(3px); }
+#notebook-dialog>article { display: flex; flex-direction: column; width: 100%; max-width: 680px; max-height: calc(100dvh - 2rem); margin: 0; padding: 0; overflow: hidden; box-shadow: 0 16px 64px #0005; }
+#notebook-dialog article>header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-shrink: 0; margin: 0; padding: 1.25rem 1.6rem; border-bottom: 1px solid var(--pico-muted-border-color); }
+#notebook-dialog article>header h2 { font-size: 1.25rem; margin-bottom: .25rem; }
+#notebook-dialog article>header p { font-size: .8rem; color: var(--pico-muted-color); margin: 0; }
+#notebook-dialog .dialog-close { padding: .25rem .6rem; line-height: 1.5; font-size: 1.2rem; }
+#notebook-dialog .notebook-form { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+#notebook-dialog .form-fields { overflow-y: auto; overscroll-behavior: contain; padding: 1.4rem 1.6rem .25rem; }
+#notebook-dialog .form-actions { padding: 1rem 1.6rem; border-top: 1px solid var(--pico-muted-border-color); flex-shrink: 0; background: var(--pico-card-sectioning-background-color); }
+@media(max-width:1020px) { .notebook-grid,.empty-notebooks { grid-template-columns: 1fr; } }
+@media(max-width:760px) {
+  .notebook-card { padding: 1.2rem; }
+  #notebook-dialog { padding: .5rem; }
+  #notebook-dialog>article { max-height: calc(100dvh - 1rem); }
+  #notebook-dialog article>header,#notebook-dialog .form-actions { padding: 1rem; }
+  #notebook-dialog .form-fields { padding: 1rem 1rem .25rem; }
+}

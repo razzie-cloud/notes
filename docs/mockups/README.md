@@ -28,8 +28,10 @@ needed. Stop the server with Ctrl+C.
 | Tag collections | [tags.html](tags.html) | [dark/tags.html](dark/tags.html) | [Light](tags-desktop.png) · [Dark](dark/tags-desktop.png) |
 | Notes tagged homelab | [tag.html](tag.html) | [dark/tag.html](dark/tag.html) | [Light](tag-desktop.png) · [Dark](dark/tag-desktop.png) |
 | Empty notebook | [empty.html](empty.html) | [dark/empty.html](dark/empty.html) | [Light](empty-desktop.png) · [Dark](dark/empty-desktop.png) |
-| Storage settings | [storage.html](storage.html) | [dark/storage.html](dark/storage.html) | [Light](storage-desktop.png) · [Dark](dark/storage-desktop.png) |
+| Connections | [storage.html](storage.html) | [dark/storage.html](dark/storage.html) | [Light](storage-desktop.png) · [Dark](dark/storage-desktop.png) |
 | First connection | [storage-empty.html](storage-empty.html) | [dark/storage-empty.html](dark/storage-empty.html) | [Light](storage-empty-desktop.png) · [Dark](dark/storage-empty-desktop.png) |
+| Notebooks | [notebooks.html](notebooks.html) | [dark/notebooks.html](dark/notebooks.html) | [Light](notebooks-desktop.png) · [Dark](dark/notebooks-desktop.png) |
+| First notebook | [notebooks-empty.html](notebooks-empty.html) | [dark/notebooks-empty.html](dark/notebooks-empty.html) | [Light](notebooks-empty-desktop.png) · [Dark](dark/notebooks-empty-desktop.png) |
 
 Mobile examples: [library](index-mobile.png), [editor](edit-mobile.png),
 [dark library](dark/index-mobile.png), [dark editor](dark/edit-mobile.png).
@@ -60,8 +62,20 @@ Mobile examples: [library](index-mobile.png), [editor](edit-mobile.png),
   fixture feedback with fixed sample cards; entered values are not persisted.
 - **Preview a save error** keeps the connection draft in place. Never enter real
   credentials. Connection forms use `hx-params="none"` and unnamed fields; no
-  credential values are transmitted. Notebook attachment is a separate compact
-  plain-S3 fixture and does not create a notebook.
+  credential values are transmitted.
+- **Notebooks** has its own sidebar page, separate from **Connections**. Existing
+  notebooks show cards with connection, bucket, prefix, effective access and
+  encryption. **Add notebook** opens a dialog; with no notebooks, the first form
+  stays inline. The empty fixture assumes connections already exist.
+- **Edit notebook** opens a prefilled dialog. Name and read-only policy are
+  editable; location and encryption remain fixed, matching the live service's
+  rules. Connection-level read-only access takes precedence. The add form includes
+  optional rclone crypt settings, with advanced options in a disclosure.
+- Notebook Cancel, Close and Escape discard the dialog draft and restore focus.
+  A simulated error retains the draft, including sample crypt passwords. Save
+  returns authored sample cards and feedback; it does not use or persist entered
+  values. Forms have unnamed inputs and `hx-params="none"`, including passwords.
+  **Preview removal** only displays feedback; all sample cards remain.
 - The preview banner switches themes on the same screen and opens the empty state.
   Theme switching or navigation resets unsaved mockup inputs.
 
@@ -71,14 +85,16 @@ Notes now has an independent Go service. See [its architecture](../architecture.
 for owner-managed connections, separate notebook mappings, optional rclone crypt,
 S3 authority and derived PostgreSQL indexing. These mockups remain static sample
 artifacts, separate from live settings and content. Storage settings reflect the
-current connection fields, including conditional writes; advanced notebook crypt
-setup is outside this concept. Removal shows feedback without deleting sample
-cards. Other screens remain broader design references.
+current connection fields, including conditional writes. Notebook forms show the
+current crypt controls without performing storage or password verification.
+Removal shows feedback without deleting sample cards. Other screens remain
+broader design references.
 
 `assets/` contains exact copies of Files' vendored PicoCSS, HTMX, their licenses,
 and the brand logo. `mockup.css` and `dark.css` originate from Files' design
 mockups; `notes.css` adds Notes layouts. Keep the light and dark HTML in sync.
-`storage-connections.js` provides the native dialog lifecycle; HTMX fetches authored
+`storage-connections.js` provides the connection dialog lifecycle; `notebooks.js`
+handles notebook dialogs and encryption field visibility. HTMX fetches authored
 fixtures. There are no external asset requests or package installations.
 CSP disallows inline scripts/styles and HTMX evaluation/history snapshots are off.
 
@@ -89,7 +105,28 @@ are linked in the screen table above. The reviewed connection flow is now
 implemented in the live templates with real saves, revision checks and error
 feedback that retains the browser draft. These fixtures still simulate mutations.
 
+Notebook dialog screenshots: [edit desktop](notebooks-edit-desktop.png),
+[edit mobile](notebooks-edit-mobile.png), [dark edit desktop](dark/notebooks-edit-desktop.png),
+[dark edit mobile](dark/notebooks-edit-mobile.png),
+[add desktop](notebooks-add-desktop.png), [add mobile](notebooks-add-mobile.png),
+[dark add desktop](dark/notebooks-add-desktop.png), [dark add mobile](dark/notebooks-add-mobile.png),
+[add with encryption](notebooks-add-encrypted-desktop.png), and
+[dark add with encryption](dark/notebooks-add-encrypted-desktop.png).
+
 ## Verification
+
+The notebook-page revision passed Chromium checks of all 22 full pages in light
+and dark at 320, 390, 768 and 1440 pixels: 88 layout cases. Checks covered one h1,
+loaded assets, sidebar links, and no page-level horizontal overflow. Sixteen
+notebook empty/populated interaction cases exercised native validation, dialog
+focus and focus return, Cancel/Close/Escape, fresh forms, immutable edit settings,
+connection read-only guidance, crypt visibility/validation, retained error drafts,
+and static saves. Edit/removal, connection-dialog regression and theme/navigation
+round trips also passed. Across 1,536 requests, all used GET and none contained
+entered sentinel settings/passwords; there were no console/page errors or failed
+requests. Local links, unique IDs, matching theme fixtures and Git whitespace
+checks passed. Updated desktop/mobile screenshots were inspected visually.
+Only mockups and documentation changed; Go checks and live backends were not run.
 
 The revised storage concept passed Chromium checks in both themes at 320, 390,
 768 and 1440 pixels for existing/empty states (16 layout cases). Checks covered
