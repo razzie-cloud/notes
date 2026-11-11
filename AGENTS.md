@@ -1,20 +1,45 @@
 # Notes development guide
 
-- This is an independent Git repository, included as the parent platform's
-  `notes/` submodule. Keep service work here and platform coordination in the parent.
-- Current scope is static mockups and a provisional architecture. Do not describe
-  storage, authentication, saving, or deployment as implemented.
-- Follow the established Razzie Cloud PicoCSS/HTMX visual style. Assets are local
-  to `docs/mockups/assets/`, including their licenses and the unchanged brand logo.
-- Keep light pages and their `dark/` counterparts aligned. Forms only request
-  local static fixtures. Never introduce real service writes into these previews.
-- Preserve Markdown as portable content, with tags and note-owned attachments.
-  S3 through embedded rclone is a proposal, not an approved backend commitment.
-- Before implementing storage, read `docs/architecture.md` and the current Files
-  storage/egress code. Do not copy Files source or invent custom encryption.
-- Future metadata and storage operations must be scoped to the gateway user UUID;
-  tags, attachments, and note IDs cannot grant access on their own.
-- For mockup changes, serve over loopback HTTP and check local links/assets,
-  HTMX responses, keyboard controls, both themes, and desktop/mobile overflow.
-  Report checks and limitations. Go checks apply once a Go service exists.
-- Do not add Notes to live Compose/Swarm routing or deploy it as part of design work.
+- Independent Go service repository, included as the parent's `notes/` submodule.
+  Keep source here and deployment coordination in parent/infra.
+- Read `docs/architecture.md` and the user correction in `docs/plan.md`. Storage
+  setup follows Files: owner-managed S3 connections, then bucket/prefix notebooks
+  with optional rclone crypt. Notes owns its settings; no Files tables are shared.
+- S3 is authoritative for Markdown/front matter and attachments. PostgreSQL
+  connection/notebook/crypt recovery records are durable and need backups. Only
+  objects, scans and River jobs are disposable. Do not describe the entire
+  database as rebuildable or restore the superseded operator-bucket configuration.
+- Scope every HTTP settings/content lookup by gateway UUID and notebook ID.
+  Background discovery may enumerate settings internally; workers resolve their
+  current owner and configuration before each job. Admin APIs require the
+  dedicated gateway admin route and a stripped/reissued X-Notes-Admin marker.
+- Use rclone's exported crypt APIs, never custom encryption. Conditional S3
+  writes default on. Only the owner's connection switch may disable them;
+  then use owner-scoped PostgreSQL revision compare-and-swap and per-object
+  locks, independent of the search index. Preserve opaque ciphertext ETags for
+  storage/indexing and issue separate DB validators to editors/API clients.
+  External writers can race the non-atomic check/upload in compatibility mode.
+  Both encrypted and plain storage keep concurrency protection; S3 success
+  remains successful if enqueueing fails. Isolate queue errors with a savepoint
+  so they cannot roll back a successful write's revision record.
+- Preserve connection-time egress checks, exact private endpoint exceptions,
+  disabled redirects/proxies, and bounded downloads. Runtime uses no rclone
+  subprocess, RC server, global fs aliases, application master key or secret volume.
+- Per-object/page transactions and storage policy checks share a connection.
+  Hold current settings row locks through S3 operations; read-only connection
+  policy overrides notebook policy. Never cache credentials/policy across calls.
+- Settings revisions prevent stale edits. Notebook physical/crypt settings are
+  immutable; connection locations cannot change while notebooks are attached.
+  Removing mappings cascades derived rows only; retain crypt recovery records
+  and S3 objects. Never render stored credentials/passwords into normal forms.
+- Scan cursors and jobs commit together. Only complete listings permit sweep;
+  current HEAD is authority for absence. Preserve locks, conditional reads,
+  revalidation, per-notebook isolation and cancellation/retry safety.
+- Embedded PicoCSS/HTMX, local licenses and unchanged logo. Escape Markdown, no
+  raw HTML or remote images. Binary options use Pico checkbox role=switch.
+  Keep static mockups separate from live writes.
+- Run gofmt, `go build ./...`, `go vet ./...`, `go test ./...`,
+  `go test -race ./...`. Integration uses disposable loopback TEST_DATABASE_URL
+  with random schemas and in-memory S3. Never test against production backends.
+- Publishing, pushing and deploying require authorization. Report checks and
+  limitations; Notes and landing images must be published before selecting tags.
