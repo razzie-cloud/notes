@@ -3,6 +3,7 @@ module github.com/razzie-cloud/notes
 go 1.27
 
 require (
+	aidanwoods.dev/go-paseto v1.6.0
 	github.com/aws/aws-sdk-go-v2 v1.43.7
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.29
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.107.3
@@ -20,6 +21,7 @@ require (
 )
 
 require (
+	aidanwoods.dev/go-result v0.3.1 // indirect
 	github.com/IBM/go-sdk-core/v5 v5.23.1 // indirect
 	github.com/Max-Sum/base32768 v0.0.0-20230304063302-18e6ce5945fd // indirect
 	github.com/abbot/go-http-auth v0.4.0 // indirect

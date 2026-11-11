@@ -232,7 +232,12 @@ outside Notes. Shutdown drains HTTP and River before closing database pools.
 
 ## HTTP API
 
-Every app route requires a trusted single canonical gateway UUID header. Caddy
+Every app route requires a trusted single canonical gateway UUID header. With
+`ACCESS_GATEWAY_URL` configured, startup fetches the gateway public keys and
+requests additionally require `X-Auth-Request-Token` with a valid v4.public
+signature, issuer, app audience, lifetime, method/URI binding and matching UUID/name.
+Expired sets refresh on use; discovery failure cannot extend cached trust. Admin
+routes also require the signed `admin=true` claim alongside the proxy marker. Caddy
 strips incoming identity and X-Notes-Admin, protects every path/callback, and issues
 the admin marker only after /forward_auth/admin succeeds for /v1/admin/*. Other
 Notes requests use ordinary /forward_auth. Usernames do not grant permissions.

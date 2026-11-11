@@ -11,9 +11,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/razzie-cloud/notes/internal/gatewayidentity"
 )
 
 type Config struct {
+	AccessGatewayURL                                         string
 	LandingOrigin                                            string
 	Port, Origin, PostgresURI, PostgresURIFrom, PasswordFile string
 	PrivateEndpoints                                         string
@@ -34,6 +37,7 @@ func Load(args []string, env func(string) string) (Config, error) {
 		}
 		f.StringVar(p, flagName, v, key)
 	}
+	str(&c.AccessGatewayURL, "access-gateway-url", "ACCESS_GATEWAY_URL", "")
 	str(&c.Port, "port", "SERVICE_PORT", "8080")
 	str(&c.LandingOrigin, "landing-origin", "LANDING_ORIGIN", "https://razzie.cloud")
 	str(&c.Origin, "origin", "ORIGIN", "http://localhost:8080")
@@ -53,6 +57,11 @@ func Load(args []string, env func(string) string) (Config, error) {
 	f.BoolVar(&c.AllowHTTP, "s3-allow-http", allow, "allow HTTP for exact endpoint exceptions")
 	if err = f.Parse(args); err != nil || f.NArg() != 0 {
 		return c, errors.New("invalid command-line configuration")
+	}
+	if c.AccessGatewayURL != "" {
+		if err := gatewayidentity.ValidateURL(c.AccessGatewayURL); err != nil {
+			return c, err
+		}
 	}
 	landing, landingErr := url.Parse(c.LandingOrigin)
 	if landingErr != nil || landing.Hostname() == "" || (landing.Scheme != "http" && landing.Scheme != "https") || landing.User != nil || landing.Path != "" || landing.RawQuery != "" || landing.ForceQuery || landing.Fragment != "" {

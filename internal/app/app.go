@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/razzie-cloud/notes/internal/config"
 	"github.com/razzie-cloud/notes/internal/db"
+	"github.com/razzie-cloud/notes/internal/gatewayidentity"
 	"github.com/razzie-cloud/notes/internal/index"
 	"github.com/razzie-cloud/notes/internal/storage"
 	"github.com/razzie-cloud/notes/internal/store"
@@ -28,14 +29,15 @@ import (
 )
 
 type App struct {
-	Config    config.Config
-	Engine    *index.Engine
-	templates *template.Template
-	ready     atomic.Int64
-	Repo      *store.Repository
-	Notebook  store.Notebook
-	Notebooks []store.Notebook
-	Writable  bool
+	identityVerifier *gatewayidentity.Verifier
+	Config           config.Config
+	Engine           *index.Engine
+	templates        *template.Template
+	ready            atomic.Int64
+	Repo             *store.Repository
+	Notebook         store.Notebook
+	Notebooks        []store.Notebook
+	Writable         bool
 }
 
 func New(c config.Config, e *index.Engine) (*App, error) {
@@ -47,7 +49,13 @@ func New(c config.Config, e *index.Engine) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	a := &App{Config: c, Engine: e, templates: t}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	verifier, err := gatewayidentity.New(ctx, c.AccessGatewayURL, c.Origin)
+	if err != nil {
+		return nil, err
+	}
+	a := &App{identityVerifier: verifier, Config: c, Engine: e, templates: t}
 	if e != nil {
 		a.Repo = e.Registry.Repo
 	}
@@ -129,6 +137,10 @@ func (a *App) Handler() http.Handler {
 				return
 			}
 			w.WriteHeader(200)
+			return
+		}
+		if err := a.identityVerifier.Verify(r, strings.HasPrefix(r.URL.Path, "/v1/admin/")); err != nil {
+			http.Error(w, "Verified gateway identity required", 401)
 			return
 		}
 		values := r.Header.Values("X-Auth-Request-User")
