@@ -1,5 +1,43 @@
 # Notes design concept
 
+## Shared S3 connection concept
+
+New standalone previews: [administrator](shared-connections-admin.html),
+[regular user](shared-connections-member.html),
+[dark administrator](dark/shared-connections-admin.html) and
+[dark regular user](dark/shared-connections-member.html).
+Production now implements the shared connection controls and path behavior.
+These pages remain independent static review fixtures.
+
+- Administrators see **Shared** when adding a connection, off by default.
+  Enabling it reveals **Add user ID as a prefix**, also off by default.
+  Shared status is disabled on edits and cannot be changed after creation.
+- Shared connections are available to everyone and managed only by admins.
+  Regular users see **Use connection** without shared edit or credential controls.
+  Personal connection management stays available to its owner.
+- **Use connection** previews a notebook's effective path. Prefix on produces
+  `s3://<bucket>/<gateway-user-uuid>/<notebook-prefix>/`; prefix off lets users
+  access the same objects if they map the same bucket and prefix. Notebook
+  settings and indexes remain personal. The preview covers the connection step;
+  encryption and other notebook options continue in existing setup.
+- The shared-only prefix option locks while any user has a notebook attached.
+  Unused shared connections can change it. No S3 objects are moved or deleted.
+  Existing Notes location
+  locks, blank saved credentials and conditional-write controls remain represented.
+- Notes and Files keep independent connection records. Sharing applies to all
+  users within each service; it does not synchronize service credentials.
+
+Dialogs retain drafts on simulated errors, return focus on Cancel/Close/Escape,
+and show fixed sample cards on save. Forms send no entered values and make no
+API writes. Role restrictions here are visual fixtures, not live authorization.
+
+Screenshots: [admin list](shared-connections-admin-desktop.png),
+[user list](shared-connections-member-desktop.png),
+[add dialog](shared-connection-add-desktop.png),
+[edit dialog](shared-connection-edit-desktop.png),
+[path preview](shared-connection-path-desktop.png) and
+[mobile add](shared-connection-add-mobile.png). Matching images live in `dark/`.
+
 Markdown documents, tags, and note-owned attachments, using the existing Razzie
 Cloud service style: PicoCSS controls, HTMX fixtures, slate canvas, navy actions,
 gold navigation, the unchanged cloud logo, and matching dark palettes.

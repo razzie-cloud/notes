@@ -9,6 +9,30 @@ notebook to a bucket/prefix with optional encryption. Notes owns its own setting
 it does not reuse Files' saved credentials or directory records. No S3 credentials
 or bucket are required in service environment variables or Swarm secrets.
 
+
+## Shared S3 connections
+
+Personal connections remain owner-managed. With `ACCESS_GATEWAY_URL` configured,
+users whose verified gateway assertion has `admin=true` see a **Shared** switch
+when adding a connection. It defaults off. Shared connections are available to
+all users of this service, but only current administrators can add, edit or remove
+them. This also applies to the original creator after demotion. Shared status
+cannot change after creation; the database enforces this invariant. Legacy proxy
+mode without signed gateway verification never grants shared-management rights.
+
+A shared connection also has **Add user ID as a prefix**, initially off. With it
+on, a mapping resolves to `s3://<bucket>/<gateway-uuid>/<mapping-prefix>/`; an empty
+mapping prefix resolves to the user's UUID root. The UUID root sits outside
+rclone encryption, preserving compatible crypt layouts within each user's root.
+This switch cannot change while any user has an attached mapping. Detach mappings
+to change it; no S3 objects are moved or deleted. Prefix-off connections allow
+users mapping the same bucket/prefix to access the same objects.
+
+Mappings, encryption passwords and recovery records remain personal. Users never
+receive the shared S3 credentials. Files and Notes own independent connection
+records: sharing within one service does not copy settings into the other.
+The storage form previews the effective path when choosing a connection.
+
 ## Set up storage
 
 1. Open **Connections → Add connection**. Choose AWS, Backblaze or another compatible

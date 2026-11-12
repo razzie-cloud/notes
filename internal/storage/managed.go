@@ -225,7 +225,10 @@ func (r *Registry) Direct(c store.Connection, n store.Notebook, secret store.Sec
 	if e != nil {
 		return nil, nil, e
 	}
-	prefix := n.Prefix
+	if c.Shared && c.UserIDPrefix && !Owner(n.Owner) {
+		return nil, nil, ErrPath
+	}
+	prefix := c.StoragePrefix(n.Owner, n.Prefix)
 	if prefix != "" {
 		prefix += "/"
 	}

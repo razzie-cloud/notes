@@ -15,17 +15,18 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("storage settings not found")
-	ErrConflict = errors.New("storage settings changed, name exists, or prefixes overlap")
-	ErrReadOnly = errors.New("storage is read-only")
+	ErrForbidden = errors.New("administrator required for shared connections")
+	ErrNotFound  = errors.New("storage settings not found")
+	ErrConflict  = errors.New("storage settings changed, name exists, or prefixes overlap")
+	ErrReadOnly  = errors.New("storage is read-only")
 )
 
 type Connection struct {
-	ID, Owner, Name, Provider, Endpoint, Region string
-	PathStyle, ReadOnly, ConditionalWrites      bool
-	Revision                                    int64
-	RetainSession                               bool   `json:"-"`
-	AccessKey, SecretKey, SessionToken          string `json:"-"`
+	ID, Owner, Name, Provider, Endpoint, Region                         string
+	PathStyle, ReadOnly, ConditionalWrites, Shared, UserIDPrefix, InUse bool
+	Revision                                                            int64
+	RetainSession                                                       bool   `json:"-"`
+	AccessKey, SecretKey, SessionToken                                  string `json:"-"`
 }
 type Notebook struct {
 	ID, Owner, ConnectionID, Name, Bucket, Prefix          string
@@ -67,13 +68,13 @@ func translate(err error) error {
 	return err
 }
 
-const connCols = `id::text,owner::text,name,provider,endpoint,region,path_style,read_only,revision,conditional_writes`
+const connCols = `id::text,owner::text,name,provider,endpoint,region,path_style,read_only,revision,conditional_writes,shared,user_id_prefix,EXISTS(SELECT 1 FROM notebooks WHERE connection_id=storage_connections.id)`
 const bookCols = `id,owner::text,connection_id::text,name,bucket,prefix,read_only,encrypted,directory_encryption,filename_encryption,filename_encoding,suffix,COALESCE(secret_id::text,''),revision`
 
 type scanner interface{ Scan(...any) error }
 
 func scanConnection(s scanner) (c Connection, e error) {
-	e = s.Scan(&c.ID, &c.Owner, &c.Name, &c.Provider, &c.Endpoint, &c.Region, &c.PathStyle, &c.ReadOnly, &c.Revision, &c.ConditionalWrites)
+	e = s.Scan(&c.ID, &c.Owner, &c.Name, &c.Provider, &c.Endpoint, &c.Region, &c.PathStyle, &c.ReadOnly, &c.Revision, &c.ConditionalWrites, &c.Shared, &c.UserIDPrefix, &c.InUse)
 	return c, translate(e)
 }
 func scanNotebook(s scanner) (n Notebook, e error) {
@@ -85,7 +86,7 @@ func validID(id string) bool {
 	return e == nil && v != uuid.Nil && v.String() == id
 }
 func (r *Repository) Connections(ctx context.Context, owner string) ([]Connection, error) {
-	rows, e := r.Pool.Query(ctx, `SELECT `+connCols+` FROM storage_connections WHERE owner=$1 ORDER BY name`, owner)
+	rows, e := r.Pool.Query(ctx, `SELECT `+connCols+` FROM storage_connections WHERE (owner=$1 OR shared) ORDER BY shared DESC,name`, owner)
 	if e != nil {
 		return nil, e
 	}
@@ -104,7 +105,7 @@ func (r *Repository) Connection(ctx context.Context, owner, id string) (Connecti
 	if !validID(id) {
 		return Connection{}, ErrNotFound
 	}
-	return scanConnection(r.Pool.QueryRow(ctx, `SELECT `+connCols+` FROM storage_connections WHERE owner=$1 AND id=$2`, owner, id))
+	return scanConnection(r.Pool.QueryRow(ctx, `SELECT `+connCols+` FROM storage_connections WHERE (owner=$1 OR shared) AND id=$2`, owner, id))
 }
 func (r *Repository) Notebooks(ctx context.Context, owner string) ([]Notebook, error) {
 	rows, e := r.Pool.Query(ctx, `SELECT `+bookCols+` FROM notebooks WHERE owner=$1 ORDER BY name`, owner)
@@ -160,11 +161,11 @@ func (r *Repository) Locked(ctx context.Context, tx pgx.Tx, owner, id string) (N
 	if e != nil {
 		return n, Connection{}, Secrets{}, e
 	}
-	c, e := scanConnection(tx.QueryRow(ctx, `SELECT `+connCols+` FROM storage_connections WHERE owner=$1 AND id=$2 FOR SHARE`, owner, n.ConnectionID))
+	c, e := scanConnection(tx.QueryRow(ctx, `SELECT `+connCols+` FROM storage_connections WHERE (owner=$1 OR shared) AND id=$2 FOR SHARE`, owner, n.ConnectionID))
 	if e != nil {
 		return n, c, Secrets{}, e
 	}
-	e = tx.QueryRow(ctx, `SELECT access_key,secret_key,session_token FROM storage_connections WHERE owner=$1 AND id=$2`, owner, c.ID).Scan(&c.AccessKey, &c.SecretKey, &c.SessionToken)
+	e = tx.QueryRow(ctx, `SELECT access_key,secret_key,session_token FROM storage_connections WHERE (owner=$1 OR shared) AND id=$2`, owner, c.ID).Scan(&c.AccessKey, &c.SecretKey, &c.SessionToken)
 	if e != nil {
 		return n, c, Secrets{}, e
 	}
@@ -175,6 +176,12 @@ func (r *Repository) Locked(ctx context.Context, tx pgx.Tx, owner, id string) (N
 	return n, c, secret, translate(e)
 }
 func (r *Repository) SaveConnection(ctx context.Context, c *Connection) error {
+	if c.Shared && !IsAdmin(ctx) {
+		return ErrForbidden
+	}
+	if c.UserIDPrefix && !c.Shared {
+		return ErrConflict
+	}
 	if !validID(c.Owner) || c.ID != "" && !validID(c.ID) {
 		return ErrNotFound
 	}
@@ -186,33 +193,39 @@ func (r *Repository) SaveConnection(ctx context.Context, c *Connection) error {
 	if c.ID == "" {
 		c.ID = uuid.NewString()
 		c.Revision = 1
-		_, e = tx.Exec(ctx, `INSERT INTO storage_connections(id,owner,name,provider,endpoint,region,path_style,read_only,access_key,secret_key,session_token,conditional_writes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, c.ID, c.Owner, c.Name, c.Provider, c.Endpoint, c.Region, c.PathStyle, c.ReadOnly, c.AccessKey, c.SecretKey, c.SessionToken, c.ConditionalWrites)
+		_, e = tx.Exec(ctx, `INSERT INTO storage_connections(id,owner,name,provider,endpoint,region,path_style,read_only,access_key,secret_key,session_token,conditional_writes,shared,user_id_prefix) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, c.ID, c.Owner, c.Name, c.Provider, c.Endpoint, c.Region, c.PathStyle, c.ReadOnly, c.AccessKey, c.SecretKey, c.SessionToken, c.ConditionalWrites, c.Shared, c.UserIDPrefix)
 	} else {
-		old, e := scanConnection(tx.QueryRow(ctx, `SELECT `+connCols+` FROM storage_connections WHERE owner=$1 AND id=$2 FOR UPDATE`, c.Owner, c.ID))
+		old, e := scanConnection(tx.QueryRow(ctx, `SELECT `+connCols+` FROM storage_connections WHERE (owner=$1 OR shared) AND id=$2 FOR UPDATE`, c.Owner, c.ID))
 		if e != nil {
 			return e
+		}
+		if old.Shared && !IsAdmin(ctx) {
+			return ErrForbidden
+		}
+		if old.Shared != c.Shared || old.Owner != c.Owner {
+			return ErrConflict
 		}
 		if old.Revision != c.Revision {
 			return ErrConflict
 		}
 		var attached bool
-		if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM notebooks WHERE owner=$1 AND connection_id=$2)`, c.Owner, c.ID).Scan(&attached); e != nil {
+		if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM notebooks WHERE connection_id=$1)`, c.ID).Scan(&attached); e != nil {
 			return e
 		}
-		if attached && (old.Provider != c.Provider || old.Endpoint != c.Endpoint || old.Region != c.Region || old.PathStyle != c.PathStyle) {
+		if attached && (old.Provider != c.Provider || old.Endpoint != c.Endpoint || old.Region != c.Region || old.PathStyle != c.PathStyle || old.UserIDPrefix != c.UserIDPrefix) {
 			return ErrConflict
 		}
 		if old.ConditionalWrites != c.ConditionalWrites {
 			// Switching validator schemes requires editors to reload. Never reuse
 			// an earlier compatibility-mode revision after a strict-mode write.
-			if _, e = tx.Exec(ctx, `DELETE FROM object_write_versions WHERE owner=$1 AND scope IN (SELECT id FROM notebooks WHERE owner=$1 AND connection_id=$2)`, c.Owner, c.ID); e != nil {
+			if _, e = tx.Exec(ctx, `DELETE FROM object_write_versions WHERE scope IN (SELECT id FROM notebooks WHERE connection_id=$1)`, c.ID); e != nil {
 				return e
 			}
 		}
 		// Blank secret inputs retain existing values; clearing a session token is explicit.
 		if c.AccessKey == "" || c.SecretKey == "" {
 			var a, s string
-			if e = tx.QueryRow(ctx, `SELECT access_key,secret_key FROM storage_connections WHERE owner=$1 AND id=$2`, c.Owner, c.ID).Scan(&a, &s); e != nil {
+			if e = tx.QueryRow(ctx, `SELECT access_key,secret_key FROM storage_connections WHERE (owner=$1 OR shared) AND id=$2`, c.Owner, c.ID).Scan(&a, &s); e != nil {
 				return e
 			}
 			if c.AccessKey == "" {
@@ -222,7 +235,7 @@ func (r *Repository) SaveConnection(ctx context.Context, c *Connection) error {
 				c.SecretKey = s
 			}
 		}
-		_, e = tx.Exec(ctx, `UPDATE storage_connections SET name=$3,provider=$4,endpoint=$5,region=$6,path_style=$7,read_only=$8,access_key=$9,secret_key=$10,session_token=CASE WHEN $12 THEN session_token ELSE $11 END,conditional_writes=$13,revision=revision+1 WHERE owner=$1 AND id=$2`, c.Owner, c.ID, c.Name, c.Provider, c.Endpoint, c.Region, c.PathStyle, c.ReadOnly, c.AccessKey, c.SecretKey, c.SessionToken, c.RetainSession, c.ConditionalWrites)
+		_, e = tx.Exec(ctx, `UPDATE storage_connections SET name=$3,provider=$4,endpoint=$5,region=$6,path_style=$7,read_only=$8,access_key=$9,secret_key=$10,session_token=CASE WHEN $12 THEN session_token ELSE $11 END,conditional_writes=$13,user_id_prefix=$14,revision=revision+1 WHERE owner=$1 AND id=$2`, c.Owner, c.ID, c.Name, c.Provider, c.Endpoint, c.Region, c.PathStyle, c.ReadOnly, c.AccessKey, c.SecretKey, c.SessionToken, c.RetainSession, c.ConditionalWrites, c.UserIDPrefix)
 		c.Revision++
 	}
 	if e != nil {
@@ -250,7 +263,7 @@ func (r *Repository) SaveNotebook(ctx context.Context, n *Notebook, secret Secre
 	if !validID(n.ConnectionID) || !validID(n.Owner) {
 		return ErrNotFound
 	}
-	c, e := scanConnection(tx.QueryRow(ctx, `SELECT `+connCols+` FROM storage_connections WHERE owner=$1 AND id=$2 FOR SHARE`, n.Owner, n.ConnectionID))
+	c, e := scanConnection(tx.QueryRow(ctx, `SELECT `+connCols+` FROM storage_connections WHERE (owner=$1 OR shared) AND id=$2 FOR SHARE`, n.Owner, n.ConnectionID))
 	if e != nil {
 		return e
 	}
@@ -272,7 +285,7 @@ func (r *Repository) SaveNotebook(ctx context.Context, n *Notebook, secret Secre
 	n.Revision = 1
 	if n.Encrypted {
 		n.SecretID = uuid.NewString()
-		recovery := Recovery{Provider: c.Provider, PathStyle: c.PathStyle, ID: n.SecretID, Name: n.Name, Bucket: n.Bucket, Prefix: n.Prefix, Endpoint: c.Endpoint, Region: c.Region, FilenameEncryption: n.FilenameEncryption, FilenameEncoding: n.FilenameEncoding, DirectoryEncryption: n.DirectoryEncryption, Suffix: n.Suffix, Password: secret.Password, Password2: secret.Password2}
+		recovery := Recovery{Provider: c.Provider, PathStyle: c.PathStyle, ID: n.SecretID, Name: n.Name, Bucket: n.Bucket, Prefix: c.StoragePrefix(n.Owner, n.Prefix), Endpoint: c.Endpoint, Region: c.Region, FilenameEncryption: n.FilenameEncryption, FilenameEncoding: n.FilenameEncoding, DirectoryEncryption: n.DirectoryEncryption, Suffix: n.Suffix, Password: secret.Password, Password2: secret.Password2}
 		data, e := json.Marshal(recovery)
 		if e != nil {
 			return e
@@ -304,7 +317,14 @@ func (r *Repository) RemoveConnection(ctx context.Context, owner, id string, rev
 	if !validID(id) {
 		return ErrNotFound
 	}
-	res, e := r.Pool.Exec(ctx, `DELETE FROM storage_connections WHERE owner=$1 AND id=$2 AND revision=$3`, owner, id, revision)
+	c, err := r.Connection(ctx, owner, id)
+	if err != nil {
+		return err
+	}
+	if c.Shared && !IsAdmin(ctx) {
+		return ErrForbidden
+	}
+	res, e := r.Pool.Exec(ctx, `DELETE FROM storage_connections WHERE owner=$1 AND id=$2 AND revision=$3`, c.Owner, id, revision)
 	if e != nil {
 		return translate(e)
 	}
@@ -349,7 +369,7 @@ func (r *Repository) Credentials(ctx context.Context, owner, id string) (Connect
 	if e != nil {
 		return c, e
 	}
-	e = r.Pool.QueryRow(ctx, `SELECT access_key,secret_key,session_token FROM storage_connections WHERE owner=$1 AND id=$2`, owner, id).Scan(&c.AccessKey, &c.SecretKey, &c.SessionToken)
+	e = r.Pool.QueryRow(ctx, `SELECT access_key,secret_key,session_token FROM storage_connections WHERE (owner=$1 OR shared) AND id=$2`, owner, id).Scan(&c.AccessKey, &c.SecretKey, &c.SessionToken)
 	return c, translate(e)
 }
 

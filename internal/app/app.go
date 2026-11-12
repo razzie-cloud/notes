@@ -160,7 +160,7 @@ func (a *App) Handler() http.Handler {
 			http.Error(w, "Administrator required", 403)
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+		ctx, cancel := context.WithTimeout(store.WithAdmin(r.Context(), a.identityVerifier.IsAdmin(r)), 60*time.Second)
 		defer cancel()
 		mux.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -175,6 +175,9 @@ func (a *App) fail(w http.ResponseWriter, r *http.Request, err error) {
 	status := 503
 	msg := "Dependency unavailable; retry later"
 	switch {
+	case errors.Is(err, store.ErrForbidden):
+		status = 403
+		msg = "Administrator required for shared connections"
 	case errors.Is(err, store.ErrReadOnly):
 		status = 403
 		msg = "Storage is read-only"
@@ -507,34 +510,34 @@ func (a *App) rebuild(w http.ResponseWriter, r *http.Request) {
 }
 
 type View struct {
-	LandingOrigin                                 string
-	Notes                                         []Note
-	Tags                                          []TagCount
-	NoteTags                                      []string
-	Total                                         int
-	TagsPage, Reading, Metadata, DraftFailed      bool
-	Title, TagsText, Body, FrontMatter            string
-	Rendered                                      template.HTML
-	Modified                                      time.Time
-	Attachments                                   []Attachment
-	Notebook                                      store.Notebook
-	Notebooks                                     []store.Notebook
-	Writable                                      bool
-	StorageNeeded                                 bool
-	StoragePage                                   bool
-	Connections                                   []store.Connection
-	EditConnection                                *store.Connection
-	ConnectionForm, ConnectionDialog              bool
-	ConnectionLocked                              bool
-	EditNotebook                                  *store.Notebook
-	NotebooksPage, NotebookForm, NotebookDialog   bool
-	NotebookCards                                 []NotebookCard
-	NotebookConnection                            store.Connection
-	Recoveries                                    []store.RecoveryInfo
-	Query, Tag, Key, Content, ETag, Message, User string
-	Editing                                       bool
-	HasNext                                       bool
-	Offset, Previous, Next                        int
+	LandingOrigin                                          string
+	Notes                                                  []Note
+	Tags                                                   []TagCount
+	NoteTags                                               []string
+	Total                                                  int
+	TagsPage, Reading, Metadata, DraftFailed               bool
+	Title, TagsText, Body, FrontMatter                     string
+	Rendered                                               template.HTML
+	Modified                                               time.Time
+	Attachments                                            []Attachment
+	Notebook                                               store.Notebook
+	Notebooks                                              []store.Notebook
+	Writable                                               bool
+	StorageNeeded                                          bool
+	StoragePage, Admin                                     bool
+	Connections                                            []store.Connection
+	EditConnection                                         *store.Connection
+	ConnectionForm, ConnectionDialog                       bool
+	ConnectionLocked                                       bool
+	EditNotebook                                           *store.Notebook
+	NotebooksPage, NotebookForm, NotebookDialog            bool
+	NotebookCards                                          []NotebookCard
+	NotebookConnection                                     store.Connection
+	Recoveries                                             []store.RecoveryInfo
+	Query, Tag, Key, Content, ETag, Message, User, OwnerID string
+	Editing                                                bool
+	HasNext                                                bool
+	Offset, Previous, Next                                 int
 }
 
 func (a *App) render(w http.ResponseWriter, r *http.Request, v View, status int) {
@@ -542,6 +545,8 @@ func (a *App) render(w http.ResponseWriter, r *http.Request, v View, status int)
 	if v.LandingOrigin == "" {
 		v.LandingOrigin = "https://razzie.cloud"
 	}
+	v.OwnerID = owner(r)
+	v.Admin = store.IsAdmin(r.Context())
 	v.User = r.Header.Get("X-Auth-Request-Name")
 	v.Notebook = a.Notebook
 	v.Notebooks = a.Notebooks

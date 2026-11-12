@@ -81,7 +81,12 @@ func (a *App) storagePage(w http.ResponseWriter, r *http.Request) {
 			a.fail(w, r, e)
 			return
 		}
+		if c.Shared && !store.IsAdmin(r.Context()) {
+			a.fail(w, r, store.ErrForbidden)
+			return
+		}
 		v.EditConnection = &c
+		v.ConnectionLocked = c.InUse
 		for _, book := range books {
 			v.ConnectionLocked = v.ConnectionLocked || book.ConnectionID == c.ID
 		}
@@ -90,6 +95,7 @@ func (a *App) storagePage(w http.ResponseWriter, r *http.Request) {
 	a.renderStorage(w, r, v, books)
 }
 func (a *App) renderStorage(w http.ResponseWriter, r *http.Request, v View, books []store.Notebook) {
+	v.Admin = store.IsAdmin(r.Context())
 	if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Target") == "connection-dialog-content" {
 		v.ConnectionDialog = true
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -119,6 +125,32 @@ func (a *App) saveConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := store.Connection{ID: r.PathValue("id"), Owner: owner(r), Name: strings.TrimSpace(r.PostForm.Get("name")), Provider: r.PostForm.Get("provider"), Endpoint: strings.TrimSpace(r.PostForm.Get("endpoint")), Region: strings.TrimSpace(r.PostForm.Get("region")), PathStyle: checked(r, "path_style"), ReadOnly: checked(r, "read_only"), ConditionalWrites: checked(r, "conditional_writes"), AccessKey: r.PostForm.Get("access_key"), SecretKey: r.PostForm.Get("secret_key"), SessionToken: r.PostForm.Get("session_token"), Revision: revision(r)}
+	c.Shared = checked(r, "shared")
+	c.UserIDPrefix = checked(r, "user_id_prefix")
+	if c.ID != "" {
+		old, err := a.Repo.Connection(r.Context(), owner(r), c.ID)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		if old.Shared && !store.IsAdmin(r.Context()) {
+			a.fail(w, r, store.ErrForbidden)
+			return
+		}
+		if _, submitted := r.PostForm["shared"]; submitted && c.Shared != old.Shared {
+			a.fail(w, r, store.ErrConflict)
+			return
+		}
+		c.Shared, c.Owner = old.Shared, old.Owner
+	}
+	if c.Shared && !store.IsAdmin(r.Context()) {
+		a.fail(w, r, store.ErrForbidden)
+		return
+	}
+	if c.UserIDPrefix && !c.Shared {
+		a.connectionValidation(w, r, "User ID prefixes require a shared connection")
+		return
+	}
 	if !store.ValidName(c.Name) || len(c.Region) > 100 || c.Region == "" || (c.Provider != "AWS" && c.Provider != "Other" && c.Provider != "Backblaze") || len(c.AccessKey) > 4096 || len(c.SecretKey) > 8192 || len(c.SessionToken) > 16384 {
 		a.connectionValidation(w, r, "Enter a name, provider, region and valid credentials")
 		return
@@ -292,6 +324,15 @@ func (a *App) removeConnection(w http.ResponseWriter, r *http.Request) {
 	if !form(w, r) {
 		return
 	}
+	c, err := a.Repo.Connection(r.Context(), owner(r), r.PathValue("id"))
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if c.Shared && !store.IsAdmin(r.Context()) {
+		a.fail(w, r, store.ErrForbidden)
+		return
+	}
 	if !checked(r, "confirm") {
 		http.Error(w, "Confirm removal of this connection", 422)
 		return
@@ -346,6 +387,11 @@ func (a *App) notebooksPage(w http.ResponseWriter, r *http.Request) {
 		c := byID[n.ConnectionID]
 		v.NotebookCards = append(v.NotebookCards, NotebookCard{Notebook: n, ConnectionName: c.Name, ConnectionReadOnly: c.ReadOnly, EffectiveReadOnly: !n.Writable(c)})
 	}
+	if connectionID := r.URL.Query().Get("connection"); connectionID != "" {
+		if c, ok := byID[connectionID]; ok {
+			v.EditNotebook.ConnectionID = c.ID
+		}
+	}
 	id := r.URL.Query().Get("notebook")
 	v.NotebookForm = id != ""
 	if id != "" && id != "new" {
@@ -363,6 +409,7 @@ func (a *App) notebooksPage(w http.ResponseWriter, r *http.Request) {
 func (a *App) renderNotebooks(w http.ResponseWriter, r *http.Request, v View, books []store.Notebook) {
 	if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Target") == "notebook-dialog-content" && len(v.Connections) > 0 {
 		v.NotebookDialog = true
+		v.OwnerID = owner(r)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if err := a.templates.ExecuteTemplate(w, "notebook-dialog", v); err != nil {
 			slog.Warn("Template failed", "event", "notes.render_failed")

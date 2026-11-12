@@ -3,18 +3,24 @@
 - Independent Go service repository, included as the parent's `notes/` submodule.
   Keep source here and deployment coordination in parent/infra.
 - Read `docs/architecture.md` and the user correction in `docs/plan.md`. Storage
-  setup follows Files: owner-managed S3 connections, then bucket/prefix notebooks
+  setup follows Files: personal or admin-managed shared S3 connections, then bucket/prefix notebooks
   with optional rclone crypt. Notes owns its settings; no Files tables are shared.
 - S3 is authoritative for Markdown/front matter and attachments. PostgreSQL
   connection/notebook/crypt recovery records are durable and need backups. Only
   objects, scans and River jobs are disposable. Do not describe the entire
   database as rebuildable or restore the superseded operator-bucket configuration.
-- Scope every HTTP settings/content lookup by gateway UUID and notebook ID.
+- Scope notebook/content/crypt lookups by gateway UUID and notebook ID.
+  Connection reads allow owned personal or shared records; only a signed gateway
+  admin may create/edit/remove shared connections, including a demoted creator.
+  Shared status is immutable. Shared-only user-ID prefixing locks while any user
+  has an attached notebook. Keep the UUID outside crypt, export the effective
+  recovery prefix, and invalidate conditional-write revisions for all attached
+  notebook owners on a shared policy change. Preserve database scope triggers.
   Background discovery may enumerate settings internally; workers resolve their
   current owner and configuration before each job. Admin APIs require the
   dedicated gateway admin route and a stripped/reissued X-Notes-Admin marker.
 - Use rclone's exported crypt APIs, never custom encryption. Conditional S3
-  writes default on. Only the owner's connection switch may disable them;
+  writes default on. Only the personal owner or a shared connection’s admin may disable them;
   then use owner-scoped PostgreSQL revision compare-and-swap and per-object
   locks, independent of the search index. Preserve opaque ciphertext ETags for
   storage/indexing and issue separate DB validators to editors/API clients.

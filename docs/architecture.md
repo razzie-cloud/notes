@@ -8,10 +8,10 @@ S3 credentials in its UI, following Files, with optional rclone encryption.
 A **connection** belongs to a gateway UUID and contains provider, endpoint, region,
 path-style option, read-only policy and credentials (access key, secret key,
 optional session token). **Conditional writes** defaults on for new and existing
-connections. Its owner can disable it for a provider without S3 write preconditions.
-A **notebook** belongs to the same owner and references a
+connections. Its personal owner or a shared connection’s administrator can disable it for a provider without S3 write preconditions.
+A **notebook** belongs to a gateway UUID and references an owned personal or shared
 connection plus bucket, prefix, read-only policy and optional crypt configuration.
-Multiple connections/notebooks are supported. Every query includes owner and ID;
+Multiple connections/notebooks are supported. Notebook/content queries include owner and ID; connection reads admit owned or shared records;
 knowing a notebook ID does not authorize content or settings access.
 
 Connections and notebooks are separate Notes-owned PostgreSQL records. Files'
@@ -44,11 +44,11 @@ Changes use revision checks. Location fields (provider, endpoint, region and
 addressing mode) cannot change while notebooks are attached, avoiding stale search
 from a different backing store. Notebook locations and crypt options are immutable;
 only name and read-only policy can change. Prefixes on the same connection/bucket
-cannot overlap. Users with multiple connections to the same physical prefix must
+cannot overlap within one user’s notebooks. Users with multiple connections to the same physical prefix must
 manage that overlap themselves, as in Files; S3 preconditions still protect edits.
 
 Connection read-only overrides notebook policy. Each operation resolves current
-owner-scoped settings/secrets under shared row locks, held until its S3 work ends.
+owner-scoped notebook/crypt settings and owned-or-shared connection settings under shared row locks, held until its S3 work ends.
 Updates/removals wait for in-flight operations; old handles cannot bypass committed
 policy changes. Indexing and mutations reuse their existing PostgreSQL transaction
 for these checks, avoiding nested pool acquisition while holding an object lock.
@@ -57,6 +57,30 @@ Readiness probes check PostgreSQL, not arbitrary user-controlled S3 endpoints.
 Deleting a notebook removes only its settings and derived index/progress; it never
 deletes S3 objects. Crypt recovery records survive removal and remain owner-scoped.
 Connections cannot be removed while notebooks reference them.
+
+
+## Shared S3 connections
+
+Personal connections remain owner-managed. With `ACCESS_GATEWAY_URL` configured,
+users whose verified gateway assertion has `admin=true` see a **Shared** switch
+when adding a connection. It defaults off. Shared connections are available to
+all users of this service, but only current administrators can add, edit or remove
+them. This also applies to the original creator after demotion. Shared status
+cannot change after creation; the database enforces this invariant. Legacy proxy
+mode without signed gateway verification never grants shared-management rights.
+
+A shared connection also has **Add user ID as a prefix**, initially off. With it
+on, a mapping resolves to `s3://<bucket>/<gateway-uuid>/<mapping-prefix>/`; an empty
+mapping prefix resolves to the user's UUID root. The UUID root sits outside
+rclone encryption, preserving compatible crypt layouts within each user's root.
+This switch cannot change while any user has an attached mapping. Detach mappings
+to change it; no S3 objects are moved or deleted. Prefix-off connections allow
+users mapping the same bucket/prefix to access the same objects.
+
+Mappings, encryption passwords and recovery records remain personal. Users never
+receive the shared S3 credentials. Files and Notes own independent connection
+records: sharing within one service does not copy settings into the other.
+The storage form previews the effective path when choosing a connection.
 
 ## Optional encryption and egress
 
