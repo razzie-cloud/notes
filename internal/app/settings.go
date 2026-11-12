@@ -73,7 +73,7 @@ func (a *App) storagePage(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, e)
 		return
 	}
-	v := View{StoragePage: true, Connections: connections, EditConnection: &store.Connection{Provider: "AWS", Region: "us-east-1", PathStyle: true, ConditionalWrites: true}}
+	v := View{StoragePage: true, Connections: connections, EditConnection: &store.Connection{Provider: "AWS", Region: "us-east-1", ConditionalWrites: true}}
 	v.ConnectionForm = r.URL.Query().Get("connection") != ""
 	if id := r.URL.Query().Get("connection"); id != "" && id != "new" {
 		c, e := a.Repo.Connection(r.Context(), owner(r), id)
@@ -125,6 +125,7 @@ func (a *App) saveConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := store.Connection{ID: r.PathValue("id"), Owner: owner(r), Name: strings.TrimSpace(r.PostForm.Get("name")), Provider: r.PostForm.Get("provider"), Endpoint: strings.TrimSpace(r.PostForm.Get("endpoint")), Region: strings.TrimSpace(r.PostForm.Get("region")), PathStyle: checked(r, "path_style"), ReadOnly: checked(r, "read_only"), ConditionalWrites: checked(r, "conditional_writes"), AccessKey: r.PostForm.Get("access_key"), SecretKey: r.PostForm.Get("secret_key"), SessionToken: r.PostForm.Get("session_token"), Revision: revision(r)}
+	c.Bucket = strings.TrimSpace(r.PostForm.Get("bucket"))
 	c.Shared = checked(r, "shared")
 	c.UserIDPrefix = checked(r, "user_id_prefix")
 	if c.ID != "" {
@@ -149,6 +150,10 @@ func (a *App) saveConnection(w http.ResponseWriter, r *http.Request) {
 	}
 	if c.UserIDPrefix && !c.Shared {
 		a.connectionValidation(w, r, "User ID prefixes require a shared connection")
+		return
+	}
+	if c.Bucket != "" && (!bucketPattern.MatchString(c.Bucket) || strings.Contains(c.Bucket, "..")) {
+		a.connectionValidation(w, r, "Enter a valid fixed S3 bucket name, or leave it blank")
 		return
 	}
 	if !store.ValidName(c.Name) || len(c.Region) > 100 || c.Region == "" || (c.Provider != "AWS" && c.Provider != "Other" && c.Provider != "Backblaze") || len(c.AccessKey) > 4096 || len(c.SecretKey) > 8192 || len(c.SessionToken) > 16384 {
@@ -241,13 +246,22 @@ func (a *App) saveNotebook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	n := store.Notebook{Owner: owner(r), Name: strings.TrimSpace(r.PostForm.Get("name")), ConnectionID: r.PostForm.Get("connection_id"), Bucket: strings.TrimSpace(r.PostForm.Get("bucket")), Prefix: strings.TrimSuffix(strings.TrimSpace(r.PostForm.Get("prefix")), "/"), ReadOnly: checked(r, "read_only"), Encrypted: checked(r, "encrypted"), FilenameEncryption: r.PostForm.Get("filename_encryption"), FilenameEncoding: r.PostForm.Get("filename_encoding"), DirectoryEncryption: checked(r, "directory_encryption"), Suffix: r.PostForm.Get("suffix")}
-	if !store.ValidName(n.Name) || !bucketPattern.MatchString(n.Bucket) || strings.Contains(n.Bucket, "..") || (n.Prefix != "" && !storage.Path(n.Prefix)) {
+	if !store.ValidName(n.Name) || (n.Prefix != "" && !storage.Path(n.Prefix)) {
 		a.notebookValidation(w, r, "Enter a notebook name, bucket and safe relative prefix")
 		return
 	}
 	c, e := a.Repo.Credentials(r.Context(), owner(r), n.ConnectionID)
 	if e != nil {
 		a.fail(w, r, e)
+		return
+	}
+	n.Bucket, e = c.BucketFor(n.Bucket)
+	if e != nil {
+		a.notebookValidation(w, r, "Bucket is fixed by the connection")
+		return
+	}
+	if !bucketPattern.MatchString(n.Bucket) || strings.Contains(n.Bucket, "..") {
+		a.notebookValidation(w, r, "Enter a valid S3 bucket name")
 		return
 	}
 	n.ConnectionRevision = c.Revision
@@ -387,11 +401,16 @@ func (a *App) notebooksPage(w http.ResponseWriter, r *http.Request) {
 		c := byID[n.ConnectionID]
 		v.NotebookCards = append(v.NotebookCards, NotebookCard{Notebook: n, ConnectionName: c.Name, ConnectionReadOnly: c.ReadOnly, EffectiveReadOnly: !n.Writable(c)})
 	}
+	if len(connections) > 0 {
+		v.EditNotebook.ConnectionID = connections[0].ID
+	}
 	if connectionID := r.URL.Query().Get("connection"); connectionID != "" {
 		if c, ok := byID[connectionID]; ok {
 			v.EditNotebook.ConnectionID = c.ID
 		}
 	}
+	v.NotebookConnection = byID[v.EditNotebook.ConnectionID]
+	v.EditNotebook.Bucket = v.NotebookConnection.Bucket
 	id := r.URL.Query().Get("notebook")
 	v.NotebookForm = id != ""
 	if id != "" && id != "new" {

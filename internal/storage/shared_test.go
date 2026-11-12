@@ -23,7 +23,7 @@ func TestSharedManagedStoragePrefixesAndPolicy(t *testing.T) {
 		for _, encrypted := range []bool{false, true} {
 			name := fmt.Sprintf("prefix-%t-encrypted-%t", prefix, encrypted)
 			t.Run(name, func(t *testing.T) {
-				c := store.Connection{Owner: "33333333-3333-4333-8333-333333333333", Name: name, Provider: "Other", Endpoint: fixture.Server.URL, Region: "us-east-1", PathStyle: true, ConditionalWrites: true, Shared: true, UserIDPrefix: prefix, AccessKey: "test", SecretKey: "test"}
+				c := store.Connection{Owner: "33333333-3333-4333-8333-333333333333", Name: name, Provider: "Other", Endpoint: fixture.Server.URL, Region: "us-east-1", PathStyle: true, ConditionalWrites: true, Bucket: "test", Shared: true, UserIDPrefix: prefix, AccessKey: "test", SecretKey: "test"}
 				if err := repo.SaveConnection(admin, &c); err != nil {
 					t.Fatal(err)
 				}

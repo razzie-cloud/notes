@@ -175,6 +175,9 @@ func (a *App) fail(w http.ResponseWriter, r *http.Request, err error) {
 	status := 503
 	msg := "Dependency unavailable; retry later"
 	switch {
+	case errors.Is(err, store.ErrBucket):
+		status = 422
+		msg = "Bucket is fixed by the connection"
 	case errors.Is(err, store.ErrForbidden):
 		status = 403
 		msg = "Administrator required for shared connections"

@@ -217,6 +217,11 @@ func (r *Registry) Open(ctx context.Context, owner, id string) (Store, store.Not
 	return &Managed{Registry: r, Owner: owner, ID: id}, n, nil
 }
 func (r *Registry) Direct(c store.Connection, n store.Notebook, secret store.Secrets) (*Mapped, func(), error) {
+	var e error
+	n.Bucket, e = c.BucketFor(n.Bucket)
+	if e != nil {
+		return nil, nil, e
+	}
 	raw, e := New(S3Config{Endpoint: c.Endpoint, Region: c.Region, Bucket: n.Bucket, AccessKey: c.AccessKey, SecretKey: c.SecretKey, SessionToken: c.SessionToken, PrivateEndpoints: r.Config.PrivateEndpoints, AllowHTTP: r.Config.AllowHTTP, PathStyle: c.PathStyle, DisableConditionalWrites: !c.ConditionalWrites})
 	if e != nil {
 		return nil, nil, e
