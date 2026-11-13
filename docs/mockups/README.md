@@ -52,10 +52,10 @@ gold navigation, the unchanged cloud logo, and matching dark palettes.
 
 ## Open the preview
 
-From the Notes repository:
+From the Notes repository within the parent checkout:
 
 ```sh
-python3 -m http.server 8767 --bind 127.0.0.1
+go run ../scripts/serve.go --addr 127.0.0.1:8767
 ```
 
 Visit <http://127.0.0.1:8767/docs/mockups/index.html>. Alternatively serve the parent
