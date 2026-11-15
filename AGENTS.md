@@ -44,6 +44,11 @@
 - Embedded PicoCSS/HTMX, local licenses and unchanged logo. Escape Markdown, no
   raw HTML or remote images. Binary options use Pico checkbox role=switch.
   Keep static mockups separate from live writes.
+- Use the shared `static/account-header.css`, identical to Gateway and Files:
+  shield, gateway-linked username and inline Administrator badge only for the
+  verified signed admin role. Use public `gatewayidentity.AccountURL`, never the
+  private discovery URL, and synchronize its helper/tests with Files. Settings
+  stay in sidebar navigation. See parent docs/brand/README.md's header contract.
 - Run gofmt, `go build ./...`, `go vet ./...`, `go test ./...`,
   `go test -race ./...`. Integration uses disposable loopback TEST_DATABASE_URL
   with random schemas and in-memory S3. Never test against production backends.

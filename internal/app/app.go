@@ -513,6 +513,7 @@ func (a *App) rebuild(w http.ResponseWriter, r *http.Request) {
 }
 
 type View struct {
+	AccountURL                                             string
 	LandingOrigin                                          string
 	Notes                                                  []Note
 	Tags                                                   []TagCount
@@ -549,6 +550,7 @@ func (a *App) render(w http.ResponseWriter, r *http.Request, v View, status int)
 		v.LandingOrigin = "https://razzie.cloud"
 	}
 	v.OwnerID = owner(r)
+	v.AccountURL = a.identityVerifier.AccountURL(v.LandingOrigin)
 	v.Admin = store.IsAdmin(r.Context())
 	v.User = r.Header.Get("X-Auth-Request-Name")
 	v.Notebook = a.Notebook
