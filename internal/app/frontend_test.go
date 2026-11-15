@@ -66,7 +66,7 @@ func TestHeaderHomeLinks(t *testing.T) {
 		if err := a.templates.ExecuteTemplate(&html, "page", data); err != nil {
 			t.Fatal(err)
 		}
-		for _, want := range []string{`class="brand" href="http://localhost:9191/"`, `class="service-name" href="/?notebook=` + notebook + `">Notes</a>`} {
+		for _, want := range []string{`class="brand" href="http://localhost:9191/"`, `class="service-name" href="/?notebook=` + notebook + `"`} {
 			if !strings.Contains(html.String(), want) {
 				t.Fatalf("missing header link %s", want)
 			}

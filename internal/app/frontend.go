@@ -267,7 +267,7 @@ func (m markdownLinks) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 		if link.AutoLinkType == ast.AutoLinkEmail {
 			destination = "mailto:" + strings.TrimPrefix(destination, "mailto:")
 		}
-		_, err := w.WriteString(`<a rel="noreferrer noopener" href="` + html.EscapeString(m.href(destination)) + `">` + html.EscapeString(string(link.Label(source))) + `</a>`)
+		_, err := w.WriteString(m.openLink(destination) + html.EscapeString(string(link.Label(source))) + `</a>`)
 		return ast.WalkSkipChildren, err
 	})
 	reg.Register(ast.KindImage, func(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -279,12 +279,24 @@ func (m markdownLinks) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	})
 	reg.Register(ast.KindLink, func(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 		if entering {
-			_, err := w.WriteString(`<a rel="noreferrer noopener" href="` + html.EscapeString(m.href(string(node.(*ast.Link).Destination))) + `">`)
+			_, err := w.WriteString(m.openLink(string(node.(*ast.Link).Destination)))
 			return ast.WalkContinue, err
 		}
 		_, err := w.WriteString("</a>")
 		return ast.WalkContinue, err
 	})
+}
+
+func (m markdownLinks) openLink(raw string) string {
+	href := m.href(raw)
+	attributes := ""
+	// Only relative Markdown links rewritten to this notebook's reader route
+	// participate in panel navigation. Attachments, fragments and external URLs
+	// retain native behavior, including external URLs back to this service.
+	if strings.HasPrefix(href, "/note?notebook=") {
+		attributes = ` hx-boost="true" hx-target="#app-layout" hx-select="#app-layout" hx-swap="outerHTML show:window:top" hx-push-url="true" hx-sync="#app-layout:replace"`
+	}
+	return `<a rel="noreferrer noopener" href="` + html.EscapeString(href) + `"` + attributes + `>`
 }
 
 func (m markdownLinks) href(raw string) string {

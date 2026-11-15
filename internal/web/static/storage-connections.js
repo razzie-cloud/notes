@@ -24,7 +24,7 @@
     }
   });
   document.addEventListener("htmx:afterSwap", event => {
-    const target = event.detail.target;
+    const target = event.detail.target || event.target;
     if (target === content && content.querySelector("[data-connection-form]") && !dialog.open) {
       dialog.showModal();
       // Avoid autofocus attributes: HTMX's later settle phase would refocus the

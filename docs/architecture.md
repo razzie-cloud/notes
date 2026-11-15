@@ -3,6 +3,37 @@
 The [plan](plan.md) is implemented with the user's storage correction: Notes takes
 S3 credentials in its UI, following Files, with optional rclone encryption.
 
+## Browser navigation
+
+Library, notebook selection, tags, pagination, reader/editor and settings links
+use locally scoped HTMX navigation. Each updates `#app-layout`, including the
+sidebar's active state, counts and notebook context, while the header and dialog
+controllers remain in place. The service link follows the current notebook and
+the document title follows the returned page. Direct URLs still render complete
+pages. Downloads, attachments, external links and new-tab actions remain native;
+relative Markdown links to other notes use the reader panel.
+
+History snapshots stay disabled. Back/Forward fetch fresh HTML for the same
+layout region. An unsaved editor guards panel changes and history traversal as
+well as native page exits. Canceling retains its draft and URL; obsolete requests
+cannot overwrite a newer view. Preview listeners initialize after swaps and
+pending preview work stops when its editor is removed. Explicit saves and
+attachment mutations retain their normal form flow. A rendered save result uses
+the equivalent GET editor URL so subsequent history restores can fetch it.
+Navigation errors retain the current page/draft with a native reload link for
+retrying or restarting sign-in.
+
+Run the opt-in browser regression with an installed Chromium browser:
+
+```sh
+NOTES_BROWSER_TEST=1 CHROMIUM_EXECUTABLE_PATH=/path/to/chromium \
+  go test ./internal/app -run TestNotesNavigationBrowser -v
+```
+
+It renders production templates/assets with local request fixtures, covering
+draft guards, fresh history, overlapping navigation, native saves, preview
+initialization and auth-error recovery. It does not verify live SSO or S3.
+
 ## Storage configuration
 
 A **connection** belongs to a gateway UUID and contains provider, endpoint, region,
