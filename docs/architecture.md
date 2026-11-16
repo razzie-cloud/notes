@@ -52,6 +52,8 @@ there is no deployment-wide bucket, provider credential or S3 secret volume.
 
 The first connection form is inline. With existing connections, Add/Edit loads
 the form through HTMX into an HTML5 dialog; direct links retain a full-page form.
+The empty home page offers notebook setup when an owned personal or shared
+connection is available; it offers connection setup only when none are available.
 Errors update feedback while keeping the draft in the browser. Successful saves
 refresh connection settings and close the dialog. Escape and Cancel discard the
 dialog draft and restore focus. Connection locations are disabled while notebooks

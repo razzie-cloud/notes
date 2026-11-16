@@ -22,7 +22,12 @@ func (a *App) notebook(fn func(*App, http.ResponseWriter, *http.Request)) http.H
 		if id == "" {
 			if len(books) == 0 {
 				if r.Method == "GET" && r.URL.Path == "/" {
-					a.render(w, r, View{StorageNeeded: true}, 200)
+					connections, e := a.Repo.Connections(r.Context(), owner(r))
+					if e != nil {
+						a.fail(w, r, e)
+						return
+					}
+					a.render(w, r, View{StorageNeeded: true, Connections: connections}, 200)
 				} else {
 					http.Error(w, "Add a notebook at /notebooks first", 409)
 				}
