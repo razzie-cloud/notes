@@ -53,7 +53,7 @@ there is no deployment-wide bucket, provider credential or S3 secret volume.
 The first connection form is inline. With existing connections, Add/Edit loads
 the form through HTMX into an HTML5 dialog; direct links retain a full-page form.
 Errors update feedback while keeping the draft in the browser. Successful saves
-refresh storage settings and close the dialog. Escape and Cancel discard the
+refresh connection settings and close the dialog. Escape and Cancel discard the
 dialog draft and restore focus. Connection locations are disabled while notebooks
 are attached, with hidden original values preserving the existing POST contract.
 
@@ -111,7 +111,7 @@ users mapping the same bucket/prefix to access the same objects.
 Mappings, encryption passwords and recovery records remain personal. Users never
 receive the shared S3 credentials. Files and Notes own independent connection
 records: sharing within one service does not copy settings into the other.
-The storage form previews the effective path when choosing a connection.
+The notebook form previews the effective path when choosing a connection.
 
 
 ### Fixed buckets and connection actions
@@ -241,7 +241,7 @@ when a note is deleted/renamed. Their owner can retrieve/delete them by API even
 the note is absent. All binary formats, including HTML/SVG, are forced downloads
 with application/octet-stream and nosniff. The explicit-save UI follows the
 reviewed mockups: sidebar, library rows, tag collections, reader, split Markdown
-editor and contextual storage forms. Goldmark renders reading and live preview
+editor and contextual connection and notebook forms. Goldmark renders reading and live preview
 with escaped text, raw HTML omitted, and images reduced to alt text. Links allow
 HTTP(S)/mailto, relative Markdown notes and note-owned attachment downloads;
 other schemes and absolute app paths are omitted. Content headings start at h2
@@ -268,7 +268,7 @@ only content manifest. Losing crypt passwords can make ciphertext unrecoverable.
 
 Migration 00002 adds this ownership model and clears only the previous operator-
 bucket prototype's derived index. No S3 writes occur in migration. To attach old
-prototype data, enter credentials in Storage and set its notebook prefix to
+prototype data, enter credentials in Connections and set its notebook prefix to
 `<old-prefix>/<gateway-user-uuid>`, preserving the old notes/attachments layout.
 Old queued scope IDs resolve to no notebook and finish without accessing storage.
 
@@ -367,7 +367,7 @@ also notebook-scoped; they do not grant access to another owner's configuration.
 
 Missing write preconditions return 428; stale ones return 412 with current ETag if
 available. Read-only mutations return 403. Cross-owner resource selection returns
-404. Storage forms at /connections and /notebooks use POST and configuration
+404. Connection and notebook forms at /connections and /notebooks use POST and configuration
 revisions (409 on conflict). /recovery/<id> downloads owner-only crypt recovery,
 including records retained after detachment. These settings routes require normal
 owner authentication, not the gateway admin role.

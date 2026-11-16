@@ -110,7 +110,7 @@ func (a *App) renderStorage(w http.ResponseWriter, r *http.Request, v View, book
 func form(w http.ResponseWriter, r *http.Request) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	if r.ParseForm() != nil {
-		http.Error(w, "Invalid storage form", 400)
+		http.Error(w, "Invalid settings form", 400)
 		return false
 	}
 	return true

@@ -183,16 +183,16 @@ func (a *App) fail(w http.ResponseWriter, r *http.Request, err error) {
 		msg = "Administrator required for shared connections"
 	case errors.Is(err, store.ErrReadOnly):
 		status = 403
-		msg = "Storage is read-only"
+		msg = "This notebook or its connection is read-only"
 	case errors.Is(err, store.ErrConflict):
 		status = 409
-		msg = "Storage settings changed, name exists, or prefixes overlap"
+		msg = "Connection or notebook settings changed, name exists, or prefixes overlap"
 	case errors.Is(err, storage.ErrCrypto):
 		status = 422
 		msg = "Cannot decrypt storage; check the crypt password and options"
 	case errors.Is(err, store.ErrNotFound):
 		status = 404
-		msg = "Storage settings not found"
+		msg = "Connection or notebook settings not found"
 	case errors.Is(err, storage.ErrNotFound):
 		status = 404
 		msg = "Object not found"
@@ -695,7 +695,7 @@ func (a *App) save(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(e, store.ErrReadOnly) {
 			status = 403
-			v.Message = "Storage is now read-only. Your draft is preserved below."
+			v.Message = "This notebook or its connection is now read-only. Your draft is preserved below."
 			a.Writable = false
 		}
 		if errors.Is(e, storage.ErrConflict) {

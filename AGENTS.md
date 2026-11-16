@@ -76,3 +76,8 @@ SQL triggers reject mapping overrides and connection restrictions incompatible
 with any user's existing mappings. Clearing a restriction retains saved mapping
 buckets. New connection forms and SQL defaults use path_style=false; retain
 existing saved choices and explicitly enable it for the local S3 demo.
+
+Use **connection** for saved S3 provider settings in UI labels, help, errors and
+documentation. Reserve **storage** for the data, provider or physical location;
+do not use it as another name for a connection. Preserve existing routes, form
+fields and database identifiers when changing wording.

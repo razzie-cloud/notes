@@ -96,7 +96,7 @@ func TestFrontendNotesAndDrafts(t *testing.T) {
 		t.Fatal(err)
 	}
 	readonly := request("GET", "/edit"+suffix+"&key=field.md", testutil.Owner, nil)
-	if readonly.Code != 200 || strings.Contains(readonly.Body.String(), `form="editor"`) || !strings.Contains(readonly.Body.String(), "This storage is read-only.") {
+	if readonly.Code != 200 || strings.Contains(readonly.Body.String(), `form="editor"`) || !strings.Contains(readonly.Body.String(), "This notebook is read-only.") {
 		t.Fatal(readonly.Code, readonly.Body.String())
 	}
 	empty := request("GET", "/"+suffix+"&q=missingword", testutil.Owner, nil)

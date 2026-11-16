@@ -45,7 +45,7 @@ func TestUserStorageSetupAndEncryptedRecovery(t *testing.T) {
 		return w
 	}
 	w := request("GET", "/", nil, testutil.Owner)
-	if w.Code != 200 || !strings.Contains(w.Body.String(), "Connect your storage") {
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "Add a connection") {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	w = request("GET", "/storage", nil, testutil.Owner)

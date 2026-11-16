@@ -1,11 +1,15 @@
 # Notes design concept
 
+Saved S3 provider settings are called **connections** throughout these previews.
+The primary connection list and first-connection desktop screenshots were
+refreshed in both themes; other screenshots record earlier design reviews.
+
 ## Connection bucket controls
 
 Every connection has **Use connection**, including personal sample cards. New
 connection forms include **Fixed bucket (optional)** and default path-style
-addressing off. The shared Cloud storage sample fixes `cloud-bucket`; its mapping
-preview shows a read-only bucket. Team archive and Personal storage keep the
+addressing off. The shared Cloud connection sample fixes `cloud-bucket`; its mapping
+preview shows a read-only bucket. Team archive and Personal connection keep the
 bucket editable. Existing edit fixtures retain their saved addressing choice.
 
 ## Shared S3 connection concept
@@ -99,7 +103,7 @@ Mobile examples: [library](index-mobile.png), [editor](edit-mobile.png),
 - **Review save failure states** demonstrates an unavailable store and a stale
   revision while retaining the draft. Comparing revisions and retry logic belong
   to a future backend; no actual concurrency or storage error is generated.
-- Storage settings show connection cards and **Add connection**. Add and Edit
+- Connection settings show connection cards and **Add connection**. Add and Edit
   fetch forms with HTMX into an HTML5 `dialog`, opened with `showModal()`.
   Edit pre-fills the selected connection's settings and leaves credentials blank.
   Location fields are disabled on the sample connection with an attached notebook.
@@ -130,7 +134,7 @@ Mobile examples: [library](index-mobile.png), [editor](edit-mobile.png),
 Notes now has an independent Go service. See [its architecture](../architecture.md)
 for owner-managed connections, separate notebook mappings, optional rclone crypt,
 S3 authority and derived PostgreSQL indexing. These mockups remain static sample
-artifacts, separate from live settings and content. Storage settings reflect the
+artifacts, separate from live settings and content. Connection settings reflect the
 current connection fields, including conditional writes. Notebook forms show the
 current crypt controls without performing storage or password verification.
 Removal shows feedback without deleting sample cards. Other screens remain
@@ -144,9 +148,9 @@ handles notebook dialogs and encryption field visibility. HTMX fetches authored
 fixtures. There are no external asset requests or package installations.
 CSP disallows inline scripts/styles and HTMX evaluation/history snapshots are off.
 
-Storage dialog screenshots: [desktop](storage-edit-desktop.png),
+Connection dialog screenshots: [desktop](storage-edit-desktop.png),
 [mobile](storage-edit-mobile.png), [dark desktop](dark/storage-edit-desktop.png),
-[dark mobile](dark/storage-edit-mobile.png). Existing/empty storage screenshots
+[dark mobile](dark/storage-edit-mobile.png). Populated/empty connection screenshots
 are linked in the screen table above. The reviewed connection flow is now
 implemented in the live templates with real saves, revision checks and error
 feedback that retains the browser draft. These fixtures still simulate mutations.
@@ -174,7 +178,7 @@ requests. Local links, unique IDs, matching theme fixtures and Git whitespace
 checks passed. Updated desktop/mobile screenshots were inspected visually.
 Only mockups and documentation changed; Go checks and live backends were not run.
 
-The revised storage concept passed Chromium checks in both themes at 320, 390,
+The revised connection concept passed Chromium checks in both themes at 320, 390,
 768 and 1440 pixels for existing/empty states (16 layout cases). Checks covered
 Add/Edit, native modal focus, Escape/Close/Cancel, prefill, blank credentials,
 locked location fields, validation, error draft retention, simulated saves,

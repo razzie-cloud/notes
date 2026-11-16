@@ -31,7 +31,7 @@ users mapping the same bucket/prefix to access the same objects.
 Mappings, encryption passwords and recovery records remain personal. Users never
 receive the shared S3 credentials. Files and Notes own independent connection
 records: sharing within one service does not copy settings into the other.
-The storage form previews the effective path when choosing a connection.
+The notebook form previews the effective path when choosing a connection.
 
 
 ### Fixed buckets and connection actions
@@ -82,7 +82,7 @@ Connection location fields are fixed while notebooks are attached. A notebook's
 bucket/prefix and crypt options are immutable: attach a new mapping to change them.
 A notebook removal is configuration cleanup and never deletes bucket contents.
 
-Notebook cards show their storage, effective access and encryption. **Edit notebook**
+Notebook cards show their connection, effective access and encryption. **Edit notebook**
 opens a dialog for name and read-only policy. Saves return to the notebook list;
 errors retain the draft, and Cancel or Escape discards it. Direct Add/Edit links
 also support full-page forms. Recovery records remain on the Notebooks page even
@@ -107,7 +107,7 @@ In the parent checkout, set local passwords in `.env`, including `S3_DEV_PASSWOR
 docker compose --profile storage-demo up --build -d
 ```
 
-Open `http://notes.localhost:8080`, then add a connection in **Storage**:
+Open `http://notes.localhost:8080`, then add a connection in **Connections**:
 
 - Provider: Other; endpoint: `http://s3-demo:9000`; region: `us-east-1`.
 - Path-style addressing: on; access key: `files-dev`; secret: `S3_DEV_PASSWORD`.
@@ -119,7 +119,7 @@ HTTP endpoints require operator-managed egress exceptions, as they do in Files.
 
 To run the service binary behind a trusted gateway/proxy, set `POSTGRES_URI` or
 `POSTGRES_URI_FROM`, set its public `ORIGIN`, then `go run ./cmd/notes`. Startup works
-with no storage connections; the first-use page guides you through setup. Do not
+with no connections; the first-use page guides you through setup. Do not
 expose the service port directly: identity comes from trusted gateway UUID headers.
 
 ## Configuration
@@ -158,7 +158,7 @@ Without a backup or recovery passwords, encrypted content cannot be recovered.
 Attaching an existing notebook schedules a scan automatically.
 
 Upgrading the earlier operator-bucket prototype clears its **derived index only**.
-Its old S3 objects remain untouched. Re-enter credentials through Storage and attach
+Its old S3 objects remain untouched. Re-enter credentials through Connections and attach
 its `<old-prefix>/<gateway-user-uuid>` prefix to recover the previous `notes/` and
 `attachments/` layout. The obsolete deployment-wide S3 flags/secrets are removed.
 
