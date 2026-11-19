@@ -24,7 +24,7 @@ func TestAuthorizationBoundary(t *testing.T) {
 	for _, tc := range []struct {
 		method, path, owner, origin, admin string
 		status                             int
-	}{{"GET", "/v1/notes", "", "", "", 401}, {"GET", "/v1/notes", "not-uuid", "", "", 401}, {"POST", "/v1/admin/rebuild", testutil.Owner, "http://evil", "true", 403}, {"GET", "/v1/admin/index", testutil.Owner, "", "", 403}, {"POST", "/v1/admin/rebuild", testutil.Owner, "null", "true", 403}, {"GET", "/healthz", "", "", "", 200}, {"GET", "/readyz", "", "", "", 503}} {
+	}{{"GET", "/v1/notes", "", "", "", 401}, {"GET", "/v1/notes", "not-uuid", "", "", 401}, {"POST", "/v1/admin/rebuild", testutil.Owner, "http://evil", "true", 403}, {"GET", "/v1/admin/index", testutil.Owner, "", "", 403}, {"GET", "/v1/admin/index", testutil.Owner, "", "true", 403}, {"POST", "/v1/admin/rebuild", testutil.Owner, "", "true", 403}, {"POST", "/v1/admin/rebuild", testutil.Owner, "null", "true", 403}, {"GET", "/healthz", "", "", "", 200}, {"GET", "/readyz", "", "", "", 503}} {
 		r := httptest.NewRequest(tc.method, tc.path, nil)
 		if tc.owner != "" {
 			r.Header.Set("X-Auth-Request-User", tc.owner)
@@ -172,13 +172,13 @@ func TestAPIAndSearchIsolation(t *testing.T) {
 		t.Fatal(w.Code, w.Body.String())
 	}
 
-	// Admin marker is supplied only by the proxy after gateway admin validation.
+	// Legacy trusted-proxy mode cannot grant admin rights through a header.
 	r := httptest.NewRequest(http.MethodPost, "/v1/admin/rebuild?notebook="+book.ID, nil)
 	r.Header.Set("X-Auth-Request-User", testutil.Owner)
 	r.Header.Set("X-Notes-Admin", "true")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, r)
-	if rec.Code != 202 {
+	if rec.Code != 403 {
 		t.Fatal(rec.Code, rec.Body.String())
 	}
 	r = httptest.NewRequest("GET", "/v1/admin/index?notebook="+book.ID, nil)
@@ -186,7 +186,7 @@ func TestAPIAndSearchIsolation(t *testing.T) {
 	r.Header.Set("X-Notes-Admin", "true")
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, r)
-	if rec.Code != 200 {
+	if rec.Code != 403 {
 		t.Fatal(rec.Code, rec.Body.String())
 	}
 	// HTML source is always escaped; the UI never executes imported Markdown.

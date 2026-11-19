@@ -195,7 +195,11 @@ fails if discovery fails. Expired key sets refresh on use; stale keys are never
 accepted. Caddy must strip incoming `X-Auth-Request-Token` and copy the gateway's
 value alongside UUID/name. The service verifies the PASETO signature, issuer,
 public app `ORIGIN`, expiry, method, URI and matching identity headers.
-An empty setting retains trusted-proxy header mode. See the gateway's
+All admin actions, including `/v1/admin/*` and shared-connection management,
+require the verified signed `admin=true` role, following Files. Use ordinary
+`/forward_auth` on every Notes path, including callbacks. Proxy role markers
+such as `X-Notes-Admin` grant no authority. An empty setting retains trusted-proxy
+header mode for ordinary access, but disables all admin actions. See the gateway's
 [signed identity contract](https://github.com/razzie-cloud/access-gateway/blob/master/docs/reference.md#signed-proxy-identity).
 
 ## Broker discovery authentication

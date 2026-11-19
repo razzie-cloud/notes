@@ -332,11 +332,14 @@ Every app route requires a trusted single canonical gateway UUID header. With
 `ACCESS_GATEWAY_URL` configured, startup fetches the gateway public keys and
 requests additionally require `X-Auth-Request-Token` with a valid v4.public
 signature, issuer, app audience, lifetime, method/URI binding and matching UUID/name.
-Expired sets refresh on use; discovery failure cannot extend cached trust. Admin
-routes also require the signed `admin=true` claim alongside the proxy marker. Caddy
-strips incoming identity and X-Notes-Admin, protects every path/callback, and issues
-the admin marker only after /forward_auth/admin succeeds for /v1/admin/*. Other
-Notes requests use ordinary /forward_auth. Usernames do not grant permissions.
+Expired sets refresh on use; discovery failure cannot extend cached trust. All
+admin actions use `gatewayidentity.IsAdmin`, propagated through `store.WithAdmin`,
+as in Files. Both `/v1/admin/*` and shared-connection management require signed
+`admin=true`; legacy proxy mode never grants admin rights. Unsigned role headers,
+including the obsolete `X-Notes-Admin` marker, grant no authority. Caddy strips
+incoming identity and protects every path/callback with ordinary `/forward_auth`,
+copying the gateway's signed identity before proxying. No path-specific proxy
+admin rule is required. Usernames do not grant permissions.
 Browser writes require the exact configured Origin; cross-site/null origins are
 rejected. Referrer-Policy is same-origin so ordinary forms carry a valid Origin.
 Cookie-free API clients can omit Origin behind the proxy. Responses use no-store,

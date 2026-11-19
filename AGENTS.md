@@ -17,8 +17,9 @@
   recovery prefix, and invalidate conditional-write revisions for all attached
   notebook owners on a shared policy change. Preserve database scope triggers.
   Background discovery may enumerate settings internally; workers resolve their
-  current owner and configuration before each job. Admin APIs require the
-  dedicated gateway admin route and a stripped/reissued X-Notes-Admin marker.
+  current owner and configuration before each job. Admin APIs and shared
+  connection writes use the same verified signed admin role as Files; never
+  authorize with a proxy marker or an unsigned role header.
 - Use rclone's exported crypt APIs, never custom encryption. Conditional S3
   writes default on. Only the personal owner or a shared connection’s admin may disable them;
   then use owner-scoped PostgreSQL revision compare-and-swap and per-object
@@ -62,7 +63,11 @@ issuer/audience/time, exact method/URI and UUID/name header equality. Cache publ
 keys only until expiry; discovery outages must not extend trust. Keep the verifier
 and tests synchronized with the other S3 app's independent copy. Empty gateway URL
 preserves trusted-proxy mode; public Files capabilities and health probes bypass
-identity. Notes admin APIs also require signed admin=true and the proxy marker.
+identity. Notes admin APIs require `IsAdmin`/`store.IsAdmin`, just like shared
+connection writes: signed admin=true is mandatory; legacy proxy mode grants no
+admin rights.
+Use ordinary /forward_auth on every Notes path; no X-Notes-Admin marker or
+path-specific proxy admin policy is needed. Keep notebook ownership checks.
 
 Broker discovery uses BROKER_TOKEN_FILE / --broker-token-file and optional
 BROKER_CA_FILE / --broker-ca-file. Discovery URLs carry only public client IDs.

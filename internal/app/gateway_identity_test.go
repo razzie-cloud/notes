@@ -28,8 +28,8 @@ func TestSignedIdentityRequired(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := server.Handler()
-	request := func(path string, signed, admin bool) *http.Request {
-		r := httptest.NewRequest("GET", origin+path, nil)
+	request := func(method, path string, signed, admin bool) *http.Request {
+		r := httptest.NewRequest(method, origin+path, nil)
 		r.Header.Set("X-Auth-Request-User", ownerID)
 		r.Header.Set("X-Auth-Request-Name", "alice")
 		if signed {
@@ -41,7 +41,7 @@ func TestSignedIdentityRequired(t *testing.T) {
 			token.SetNotBefore(now)
 			token.SetExpiration(now.Add(time.Minute))
 			token.SetString("name", "alice")
-			token.SetString("method", "GET")
+			token.SetString("method", method)
 			token.SetString("uri", path)
 			_ = token.Set("admin", admin)
 			token.SetFooter([]byte(kid))
@@ -50,7 +50,7 @@ func TestSignedIdentityRequired(t *testing.T) {
 		return r
 	}
 	for _, signed := range []bool{false, true} {
-		r := request("/static/app.css", signed, false)
+		r := request(http.MethodGet, "/static/app.css", signed, false)
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
 		want := 401
@@ -61,7 +61,7 @@ func TestSignedIdentityRequired(t *testing.T) {
 			t.Fatalf("signed=%v: got %d want %d: %s", signed, w.Code, want, w.Body.String())
 		}
 	}
-	r := request("/static/app.css", true, false)
+	r := request(http.MethodGet, "/static/app.css", true, false)
 	r.Header.Set("X-Auth-Request-Name", "mallory")
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, r)
@@ -74,17 +74,31 @@ func TestSignedIdentityRequired(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatal("health probe requires signature")
 	}
-	r = request("/v1/admin/index", true, false)
-	r.Header.Set("X-Notes-Admin", "true")
-	w = httptest.NewRecorder()
-	handler.ServeHTTP(w, r)
-	if w.Code != 401 {
-		t.Fatal("unsigned admin marker granted access")
+	for _, endpoint := range []struct{ method, path string }{
+		{http.MethodGet, "/v1/admin/index"},
+		{http.MethodPost, "/v1/admin/rebuild"},
+	} {
+		for _, signed := range []bool{false, true} {
+			r = request(endpoint.method, endpoint.path, signed, false)
+			r.Header.Set("X-Notes-Admin", "true")
+			r.Header.Set("X-Auth-Request-Admin", "true")
+			w = httptest.NewRecorder()
+			handler.ServeHTTP(w, r)
+			want := http.StatusUnauthorized
+			if signed {
+				want = http.StatusForbidden
+			}
+			if w.Code != want {
+				t.Fatalf("path=%s signed=%v: got %d want %d: %s", endpoint.path, signed, w.Code, want, w.Body.String())
+			}
+		}
 	}
-	r = request("/v1/admin/index", true, true)
+	// An unknown admin route reaches the router only for a signed administrator,
+	// without needing a database fixture or any proxy role marker.
+	r = request(http.MethodGet, "/v1/admin/unknown", true, true)
 	w = httptest.NewRecorder()
 	handler.ServeHTTP(w, r)
-	if w.Code != 403 {
-		t.Fatal("signed admin still requires proxy admin marker")
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("signed admin without marker: got %d: %s", w.Code, w.Body.String())
 	}
 }

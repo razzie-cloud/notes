@@ -4,6 +4,36 @@ Verified on 2026-11-10 using Go 1.27, disposable loopback PostgreSQL 14 with dat
 under `/tmp`, random integration schemas, and in-memory S3. No production data,
 Docker context, live deployment or external provider was changed.
 
+## Consistent signed admin authorization (2026-11-19)
+
+Notes maintenance APIs now use the same `gatewayidentity.IsAdmin` role check as
+Files and both apps' shared connections. The old `X-Notes-Admin` marker grants no
+authority. Legacy proxy mode denies all admin actions. Parent Caddy and Swarm
+labels use ordinary `/forward_auth` for every Notes path, including callbacks.
+Publish/select an updated Notes image before applying the simplified proxy rules.
+
+Validation used Go 1.27, a temporary loopback PostgreSQL 17 container with random
+test schemas, and the in-memory S3 fixtures:
+
+- `gofmt`, `go build ./...`, `go vet ./...`, `go test ./...` and
+  `go test -race ./...` passed in Notes. Regression cases cover missing signatures,
+  members with forged role headers, legacy-mode rejection, signed admin access
+  without a marker, read-only notebook maintenance and cross-owner denial.
+- Parent Compose validation passed with `.env.example`, both with and without
+  the `storage-demo` profile. Swarm Compose validation passed with the example
+  environment and placeholder image tags. Notes and Files management route labels
+  match exactly, and signed verification remains enabled. No deployment was performed.
+- The cached Caddy image adapted the real parent Caddyfile successfully. Twelve
+  isolated loopback cases using that generated Notes route and auth/backend stubs
+  verified identity stripping/copying, anonymous redirects, callback protection,
+  original method/URI preservation and ordinary auth for maintenance APIs.
+- `git diff --check` passed in the parent and affected submodules. The independent
+  Files/Notes verifier implementations remain identical apart from their comments.
+
+The opt-in browser navigation test was skipped. No real passkey/SSO flow, live
+Swarm rollout or external S3 provider was exercised. The routing stubs check
+proxy transport; actual PASETO/role enforcement is covered by Notes tests.
+
 ## Separate notebook settings page (2026-11-11)
 
 The reviewed notebook concept is implemented at `/notebooks`, separately from
@@ -80,7 +110,8 @@ S3 development-fixture change. That Files code is unchanged by this correction.
 The landing Notes card/navigation passed both themes at 320–1440px. Generated
 local Caddy routing was tested with an auth stub: incoming identity/admin markers
 are stripped, verified identity is copied, members are denied admin APIs, and
-approved admins succeed. Landing/routing behavior remains in place.
+approved admins succeed. This records the earlier proxy-marker policy; the signed
+admin authorization section above supersedes its admin routing.
 
 ## Environment limits
 

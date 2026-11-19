@@ -140,7 +140,7 @@ func (a *App) Handler() http.Handler {
 			w.WriteHeader(200)
 			return
 		}
-		if err := a.identityVerifier.Verify(r, strings.HasPrefix(r.URL.Path, "/v1/admin/")); err != nil {
+		if err := a.identityVerifier.Verify(r, false); err != nil {
 			http.Error(w, "Verified gateway identity required", 401)
 			return
 		}
@@ -156,11 +156,12 @@ func (a *App) Handler() http.Handler {
 				return
 			}
 		}
-		if strings.HasPrefix(r.URL.Path, "/v1/admin/") && r.Header.Get("X-Notes-Admin") != "true" {
+		admin := a.identityVerifier.IsAdmin(r)
+		if strings.HasPrefix(r.URL.Path, "/v1/admin/") && !admin {
 			http.Error(w, "Administrator required", 403)
 			return
 		}
-		ctx, cancel := context.WithTimeout(store.WithAdmin(r.Context(), a.identityVerifier.IsAdmin(r)), 60*time.Second)
+		ctx, cancel := context.WithTimeout(store.WithAdmin(r.Context(), admin), 60*time.Second)
 		defer cancel()
 		mux.ServeHTTP(w, r.WithContext(ctx))
 	})
