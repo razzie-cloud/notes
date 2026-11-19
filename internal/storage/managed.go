@@ -244,7 +244,7 @@ func (r *Registry) Direct(c store.Connection, n store.Notebook, secret store.Sec
 	}
 	return &Mapped{Raw: raw, Owner: n.Owner, Prefix: prefix, Cipher: cipher}, close, nil
 }
-func (m *Managed) call(ctx context.Context, write bool, key string, fn func(Store, store.Connection, pgx.Tx) error) error {
+func (m *Managed) call(ctx context.Context, write bool, key string, fn func(Store, store.Connection, pgx.Tx, objectVersion) error) error {
 	tx := store.Transaction(ctx)
 	owned := tx == nil
 	if tx == nil {
@@ -276,7 +276,22 @@ func (m *Managed) call(ctx context.Context, write bool, key string, fn func(Stor
 		return e
 	}
 	defer close()
-	if e = fn(mapped, c, tx); e != nil {
+	var identity objectVersion
+	if key != "" && !c.ConditionalWrites {
+		physical, err := mapped.physical(key)
+		if err != nil {
+			return err
+		}
+		bucket, err := c.BucketFor(n.Bucket)
+		if err != nil {
+			return err
+		}
+		identity = objectVersion{owner: c.Owner, scope: c.ID, key: bucket + "/" + physical}
+		if err = db.LockObject(ctx, tx, "notes-storage-object:"+identity.scope, identity.key); err != nil {
+			return err
+		}
+	}
+	if e = fn(mapped, c, tx, identity); e != nil {
 		return e
 	}
 	if owned {
@@ -290,7 +305,7 @@ func (m *Managed) call(ctx context.Context, write bool, key string, fn func(Stor
 	return e
 }
 func (m *Managed) List(ctx context.Context, prefix, cursor string) (out Page, e error) {
-	e = m.call(ctx, false, "", func(s Store, _ store.Connection, _ pgx.Tx) error {
+	e = m.call(ctx, false, "", func(s Store, _ store.Connection, _ pgx.Tx, _ objectVersion) error {
 		var e error
 		out, e = s.List(ctx, prefix, cursor)
 		return e
@@ -298,18 +313,18 @@ func (m *Managed) List(ctx context.Context, prefix, cursor string) (out Page, e 
 	return
 }
 func (m *Managed) Head(ctx context.Context, key string) (out Meta, e error) {
-	e = m.call(ctx, false, key, func(s Store, c store.Connection, tx pgx.Tx) error {
+	e = m.call(ctx, false, key, func(s Store, c store.Connection, tx pgx.Tx, identity objectVersion) error {
 		var err error
 		out, err = s.Head(ctx, key)
 		if err == nil && !c.ConditionalWrites {
-			out.WriteETag, err = m.observe(ctx, tx, key, out, true)
+			out.WriteETag, err = m.observe(ctx, tx, identity, out, true)
 		}
 		return err
 	})
 	return
 }
 func (m *Managed) Get(ctx context.Context, key, etag string, limit int64) (b []byte, out Meta, e error) {
-	e = m.call(ctx, false, key, func(s Store, c store.Connection, tx pgx.Tx) error {
+	e = m.call(ctx, false, key, func(s Store, c store.Connection, tx pgx.Tx, identity objectVersion) error {
 		var err error
 		b, out, err = s.Get(ctx, key, etag, limit)
 		if err == nil && !c.ConditionalWrites && etag == "" {
@@ -320,7 +335,7 @@ func (m *Managed) Get(ctx context.Context, key, etag string, limit int64) (b []b
 			if current.ETag != out.ETag || current.Size != out.Size || out.Version != "" && out.Version != current.Version {
 				return ErrConflict
 			}
-			out.WriteETag, err = m.observe(ctx, tx, key, current, true)
+			out.WriteETag, err = m.observe(ctx, tx, identity, current, true)
 			return err
 		}
 		return err
@@ -328,13 +343,13 @@ func (m *Managed) Get(ctx context.Context, key, etag string, limit int64) (b []b
 	return
 }
 func (m *Managed) Put(ctx context.Context, key string, b []byte, etag, ct string) (out Meta, e error) {
-	e = m.call(ctx, true, key, func(s Store, c store.Connection, tx pgx.Tx) error {
+	e = m.call(ctx, true, key, func(s Store, c store.Connection, tx pgx.Tx, identity objectVersion) error {
 		var err error
 		if c.ConditionalWrites {
 			out, err = s.Put(ctx, key, b, etag, ct)
 			return err
 		}
-		underlying, revision, err := m.claim(ctx, tx, s, key, etag)
+		underlying, revision, err := m.claim(ctx, tx, identity, s, key, etag)
 		if err != nil {
 			return err
 		}
@@ -343,27 +358,27 @@ func (m *Managed) Put(ctx context.Context, key string, b []byte, etag, ct string
 			return err
 		}
 		out.WriteETag = databaseValidator(revision)
-		m.record(ctx, tx, key, revision, out, true)
+		m.record(ctx, tx, identity, revision, out, true)
 		return nil
 	})
 	return
 }
 func (m *Managed) Delete(ctx context.Context, key, etag string) error {
-	return m.call(ctx, true, key, func(s Store, c store.Connection, tx pgx.Tx) error {
+	return m.call(ctx, true, key, func(s Store, c store.Connection, tx pgx.Tx, identity objectVersion) error {
 		if c.ConditionalWrites {
 			return s.Delete(ctx, key, etag)
 		}
 		if etag == "*" || etag == "" {
 			return ErrConflict
 		}
-		underlying, revision, err := m.claim(ctx, tx, s, key, etag)
+		underlying, revision, err := m.claim(ctx, tx, identity, s, key, etag)
 		if err != nil {
 			return err
 		}
 		if err = s.Delete(ctx, key, underlying); err != nil {
 			return err
 		}
-		m.record(ctx, tx, key, revision, Meta{}, false)
+		m.record(ctx, tx, identity, revision, Meta{}, false)
 		return nil
 	})
 }

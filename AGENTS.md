@@ -22,8 +22,13 @@
   authorize with a proxy marker or an unsigned role header.
 - Use rclone's exported crypt APIs, never custom encryption. Conditional S3
   writes default on. Only the personal owner or a shared connection’s admin may disable them;
-  then use owner-scoped PostgreSQL revision compare-and-swap and per-object
-  locks, independent of the search index. Preserve opaque ciphertext ETags for
+  then use connection-creator-owned PostgreSQL revision compare-and-swap keyed by
+  connection UUID and effective bucket/exact mapped physical key. Keep notebook
+  locks, policy row locks and compatibility physical-object locks on the same
+  transaction, including reads/indexing; independent connections/external writers
+  remain outside this coordination. Revisions survive notebook removal/reattach;
+  mode changes, detached connection saves and connection deletion invalidate them,
+  independent of the search index. Preserve opaque ciphertext ETags for
   storage/indexing and issue separate DB validators to editors/API clients.
   External writers can race the non-atomic check/upload in compatibility mode.
   Both encrypted and plain storage keep concurrency protection; S3 success
@@ -53,6 +58,10 @@
 - Run gofmt, `go build ./...`, `go vet ./...`, `go test ./...`,
   `go test -race ./...`. Integration uses disposable loopback TEST_DATABASE_URL
   with random schemas and in-memory S3. Never test against production backends.
+- Migration 00006 requires stopping/draining all Notes HTTP processes and River
+  workers, migrating once, then starting only new replicas and reloading editors.
+  No mixed-version rollout. Rollback must also stop/drain, migrate Down, restart
+  the old release and reload editors; binary-only rollback is unsupported.
 - Publishing, pushing and deploying require authorization. Report checks and
   limitations; Notes and landing images must be published before selecting tags.
 

@@ -451,6 +451,18 @@ func TestEncryptedNotebookRebuild(t *testing.T) {
 
 func TestIndexAndScanReuseOneConnection(t *testing.T) {
 	e, s, _ := fixture(t)
+	n, err := e.Registry.Repo.Notebook(context.Background(), e.Owner, e.Scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	connection, err := e.Registry.Repo.Connection(context.Background(), e.Owner, n.ConnectionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	connection.ConditionalWrites = false
+	if err = e.Registry.Repo.SaveConnection(context.Background(), &connection); err != nil {
+		t.Fatal(err)
+	}
 	cfg := e.Pool.Config()
 	cfg.MaxConns = 1
 	pool, err := pgxpool.NewWithConfig(context.Background(), cfg)
@@ -469,5 +481,85 @@ func TestIndexAndScanReuseOneConnection(t *testing.T) {
 	}
 	if _, err = e.ScanPage(ctx); err != nil {
 		t.Fatal("scan required nested pool acquisition", err)
+	}
+}
+
+func TestSharedAliasIndexWaitsForWrite(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	pool := testutil.Database(t)
+	f, cfg := testutil.ObjectStore(t)
+	registry := &storage.Registry{Repo: &store.Repository{Pool: pool}, Config: cfg}
+	c := store.Connection{Owner: testutil.Owner, Name: "Shared", Provider: "Other", Endpoint: f.Server.URL, Region: "us-east-1", PathStyle: true, Shared: true, AccessKey: "test", SecretKey: "test"}
+	if err := registry.Repo.SaveConnection(store.WithAdmin(ctx, true), &c); err != nil {
+		t.Fatal(err)
+	}
+	books := make([]store.Notebook, 2)
+	for i, owner := range []string{testutil.Owner, testutil.Other} {
+		books[i] = store.Notebook{Owner: owner, ConnectionID: c.ID, Name: "Shared", Bucket: "test"}
+		if err := registry.Repo.SaveNotebook(ctx, &books[i], store.Secrets{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	root, err := index.New(pool, registry, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer, err := root.Bind(ctx, books[0].Owner, books[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, err := root.Bind(ctx, books[1].Owner, books[1].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := testutil.Owner + "/notes/shared.md"
+	initial, err := writer.Storage.Put(ctx, key, []byte("# Initial"), "*", "text/markdown")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(context.Background())
+	saved, err := writer.Storage.Put(store.WithTransaction(ctx, tx), key, []byte("# Updated"), initial.Validator(), "text/markdown")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- reader.Index(ctx, testutil.Other+"/notes/shared.md") }()
+	ticker := time.NewTicker(time.Millisecond * 10)
+	defer ticker.Stop()
+	for {
+		var waiting bool
+		err = pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND NOT granted AND classid=((hashtextextended($1,0)>>32)&4294967295)::oid AND objid=(hashtextextended($1,0)&4294967295)::oid)`, "notes-storage-object:"+c.ID+":test/notes/shared.md").Scan(&waiting)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if waiting {
+			break
+		}
+		select {
+		case err := <-done:
+			t.Fatal("alias index did not wait for physical write", err)
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-ticker.C:
+		}
+	}
+	if err = tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err = <-done; err != nil {
+		t.Fatal(err)
+	}
+	_, current, err := reader.Storage.Get(ctx, testutil.Other+"/notes/shared.md", "", 4096)
+	if err != nil || current.Validator() != saved.Validator() {
+		t.Fatal("index reset writer's revision", current, err)
+	}
+	var title string
+	if err = pool.QueryRow(ctx, `SELECT title FROM objects WHERE scope=$1`, reader.Scope).Scan(&title); err != nil || title != "Updated" {
+		t.Fatal(title, err)
 	}
 }

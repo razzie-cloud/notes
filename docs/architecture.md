@@ -159,10 +159,16 @@ integrity and, by default, preserves If-Match / If-None-Match. Unsupported reque
 fail rather than silently falling back. Safe diagnostics also classify unsupported headers
 named in bounded provider error XML without logging the raw response.
 
-With **Conditional writes off**, each note/attachment uses an owner-scoped row in
-`object_write_versions`, separate from the asynchronous search index. Reads issue
+With **Conditional writes off**, each note/attachment uses a connection-scoped row
+in `object_write_versions`, owned by the connection creator and keyed by effective
+bucket plus the exact mapped physical S3 key, including prefixes and rclone filename
+encryption. Authorized notebooks on the same connection that resolve to the same
+object share this row, even across users and replicas. It grants no storage access;
+every operation first rechecks notebook ownership and current policies. Reads issue
 an opaque `"notes-db-<revision>"` ETag. Mutations take the same PostgreSQL per-object
-transaction lock as indexing, read current S3 metadata, compare the client token
+transaction lock as indexing and then a separate physical-object lock after policy
+row locks, all on the caller's transaction. HEAD/GET take this physical lock too.
+Mutations read current S3 metadata, compare the client token
 with the current database revision, and claim a new UUID with an SQL
 compare-and-swap before writing. Every successful save advances the revision even
 when the content and S3 ETag are unchanged. Deletes retain a revision tombstone;
@@ -175,10 +181,14 @@ may omit version IDs on PUT; learning a previously missing version ID on HEAD
 does not spuriously invalidate the token returned by that save. Changing the
 connection's conditional-writes setting invalidates its earlier DB revisions;
 reload existing editors after switching modes. No replica caches this policy.
+Removing a notebook retains its physical revisions for other mappings and a later
+reattach to the same unchanged object. Saving a detached connection clears retained
+revisions because its location may change. Deleting the connection cascades them;
+a recreated connection has a new UUID and revisions.
 
-Database coordination protects writers using the same notebook/database. Separate
-mappings, independent Notes installations and external S3 clients do not take
-these locks. An external change between HEAD and upload/delete can be overwritten
+Database coordination protects mappings using the same connection/database.
+Independent connection records, other Notes installations, Files and external S3
+clients do not share these locks. An external change between HEAD and upload/delete can be overwritten
 or deleted without a conflict. Without retained object versions or backups, that
 content may be unrecoverable. Notes does not automatically enable bucket versioning.
 PostgreSQL and S3 are not atomic: a failed database commit after an S3 success can
@@ -267,6 +277,17 @@ After a full database loss, restore its settings backup or re-enter credentials,
 bucket/prefix and exact crypt parameters/recovery passwords. Attach schedules a
 scan automatically; existing notes/attachments recreate search without a database-
 only content manifest. Losing crypt passwords can make ciphertext unrecoverable.
+
+Migration 00006 deliberately expires only compatibility-mode write tokens and
+moves their foreign key from notebooks to connection UUIDs. This requires a stopped
+writer upgrade: back up settings and preserve drafts, stop and drain **all** Notes
+HTTP processes and River workers, migrate once, then start only the new release.
+Reload compatibility-mode editors; old tokens conflict. Mixed old/new replicas are
+unsafe because they coordinate different identities. Rollback also stops/drains
+all processes, runs the Down migration, restarts the old release and reloads editors;
+rolling back the binary alone is unsupported. Downgrade restores notebook-only
+coordination, so avoid concurrent compatibility-mode writes through shared aliases.
+Neither direction changes settings, secrets, indexes, jobs or S3 content.
 
 Migration 00002 adds this ownership model and clears only the previous operator-
 bucket prototype's derived index. No S3 writes occur in migration. To attach old

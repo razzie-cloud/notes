@@ -91,15 +91,19 @@ func TestSharedManagedStoragePrefixesAndPolicy(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
+				expectedRows := 1
+				if prefix {
+					expectedRows = 2
+				}
 				var count int
-				if err := pool.QueryRow(ctx, `SELECT count(*) FROM object_write_versions WHERE scope IN (SELECT id FROM notebooks WHERE connection_id=$1)`, c.ID).Scan(&count); err != nil || count != 2 {
+				if err := pool.QueryRow(ctx, `SELECT count(*) FROM object_write_versions WHERE scope=$1`, c.ID).Scan(&count); err != nil || count != expectedRows {
 					t.Fatal("compatibility revisions not recorded", count, err)
 				}
 				c.ConditionalWrites = true
 				if err := repo.SaveConnection(admin, &c); err != nil {
 					t.Fatal(err)
 				}
-				if err := pool.QueryRow(ctx, `SELECT count(*) FROM object_write_versions WHERE scope IN (SELECT id FROM notebooks WHERE connection_id=$1)`, c.ID).Scan(&count); err != nil || count != 0 {
+				if err := pool.QueryRow(ctx, `SELECT count(*) FROM object_write_versions WHERE scope=$1`, c.ID).Scan(&count); err != nil || count != 0 {
 					t.Fatal("cross-owner revisions were not invalidated", count, err)
 				}
 			})

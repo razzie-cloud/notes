@@ -11,6 +11,8 @@ import (
 
 	"github.com/razzie-cloud/notes/internal/app"
 	"github.com/razzie-cloud/notes/internal/index"
+	"github.com/razzie-cloud/notes/internal/storage"
+	"github.com/razzie-cloud/notes/internal/store"
 	"github.com/razzie-cloud/notes/internal/testutil"
 )
 
@@ -18,14 +20,17 @@ func TestCompatibilityEditorAPIAndQueueFailure(t *testing.T) {
 	ctx := context.Background()
 	pool := testutil.Database(t)
 	fixture, cfg := testutil.ObjectStore(t)
-	registry, book := testutil.Attach(t, pool, fixture, cfg, testutil.Owner, "compat", false, "")
-	connection, err := registry.Repo.Connection(ctx, testutil.Owner, book.ConnectionID)
-	if err != nil {
+	registry := &storage.Registry{Repo: &store.Repository{Pool: pool}, Config: cfg}
+	connection := store.Connection{Owner: testutil.Owner, Name: "Shared", Provider: "Other", Endpoint: fixture.Server.URL, Region: "us-east-1", PathStyle: true, Shared: true, AccessKey: "test", SecretKey: "test"}
+	if err := registry.Repo.SaveConnection(store.WithAdmin(ctx, true), &connection); err != nil {
 		t.Fatal(err)
 	}
-	connection.ConditionalWrites = false
-	connection.RetainSession = true
-	if err = registry.Repo.SaveConnection(ctx, &connection); err != nil {
+	book := store.Notebook{Owner: testutil.Owner, ConnectionID: connection.ID, Name: "Shared", Bucket: "test"}
+	if err := registry.Repo.SaveNotebook(ctx, &book, store.Secrets{}); err != nil {
+		t.Fatal(err)
+	}
+	alias := store.Notebook{Owner: testutil.Other, ConnectionID: connection.ID, Name: "Shared", Bucket: "test"}
+	if err := registry.Repo.SaveNotebook(ctx, &alias, store.Secrets{}); err != nil {
 		t.Fatal(err)
 	}
 	fixture.RejectConditionalWrites.Store(true)
@@ -38,9 +43,10 @@ func TestCompatibilityEditorAPIAndQueueFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := a.Handler()
+	requestOwner, requestBook := book.Owner, book.ID
 	request := func(method, path, body, validator string) *httptest.ResponseRecorder {
-		r := httptest.NewRequest(method, path+"?notebook="+book.ID, strings.NewReader(body))
-		r.Header.Set("X-Auth-Request-User", testutil.Owner)
+		r := httptest.NewRequest(method, path+"?notebook="+requestBook, strings.NewReader(body))
+		r.Header.Set("X-Auth-Request-User", requestOwner)
 		if validator == "*" {
 			r.Header.Set("If-None-Match", "*")
 		} else {
@@ -64,17 +70,19 @@ func TestCompatibilityEditorAPIAndQueueFailure(t *testing.T) {
 		t.Fatal("read lost DB revision", w.Code, w.Header())
 	}
 	r := httptest.NewRequest("GET", "/edit?notebook="+book.ID+"&key=a.md", nil)
-	r.Header.Set("X-Auth-Request-User", testutil.Owner)
+	r.Header.Set("X-Auth-Request-User", requestOwner)
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	if w.Code != 200 || !strings.Contains(html.UnescapeString(w.Body.String()), `name="etag" value="`+first+`"`) {
 		t.Fatal("editor did not receive DB revision", w.Code)
 	}
+	requestOwner, requestBook = alias.Owner, alias.ID
 	w = request("PUT", "/v1/notes/a.md", "# First", first)
 	second := w.Header().Get("ETag")
 	if w.Code != 200 || second == first {
 		t.Fatal(w.Code, w.Body.String(), second)
 	}
+	requestOwner, requestBook = book.Owner, book.ID
 	form := url.Values{"key": {"a.md"}, "content": {"# Preserved stale draft"}, "etag": {first}}
 	w = request("POST", "/save", form.Encode(), "")
 	if w.Code != 412 || !strings.Contains(w.Body.String(), "Preserved stale draft") {
@@ -89,11 +97,13 @@ func TestCompatibilityEditorAPIAndQueueFailure(t *testing.T) {
 	if _, err = pool.Exec(ctx, `ALTER TABLE river_job RENAME TO river_job_offline`); err != nil {
 		t.Fatal(err)
 	}
+	requestOwner, requestBook = alias.Owner, alias.ID
 	w = request("PUT", "/v1/notes/a.md", "# First", second)
 	third := w.Header().Get("ETag")
 	if w.Code != 200 || third == second {
 		t.Fatal("saved content reported failed", w.Code, w.Body.String())
 	}
+	requestOwner, requestBook = book.Owner, book.ID
 	w = request("GET", "/v1/notes/a.md", "", "")
 	if w.Code != 200 || w.Header().Get("ETag") != third {
 		t.Fatal("queue failure rolled back revision", w.Code, w.Header())

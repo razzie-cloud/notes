@@ -8,7 +8,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// ObserveVersion is called under the notebook/object advisory lock with current
+// ObserveVersion uses the connection creator, connection UUID and bucket/physical
+// key, under the physical-object advisory lock with current
 // S3 metadata. External changes invalidate previously issued database revisions.
 // Search-index rows are never used to authorize writes.
 func (r *Repository) ObserveVersion(ctx context.Context, tx pgx.Tx, owner, scope, key, etag, version string, present bool) (string, error) {

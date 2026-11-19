@@ -215,10 +215,11 @@ func (r *Repository) SaveConnection(ctx context.Context, c *Connection) error {
 		if attached && (old.Provider != c.Provider || old.Endpoint != c.Endpoint || old.Region != c.Region || old.PathStyle != c.PathStyle || old.UserIDPrefix != c.UserIDPrefix) {
 			return ErrConflict
 		}
-		if old.ConditionalWrites != c.ConditionalWrites {
+		if old.ConditionalWrites != c.ConditionalWrites || !attached {
 			// Switching validator schemes requires editors to reload. Never reuse
-			// an earlier compatibility-mode revision after a strict-mode write.
-			if _, e = tx.Exec(ctx, `DELETE FROM object_write_versions WHERE scope IN (SELECT id FROM notebooks WHERE connection_id=$1)`, c.ID); e != nil {
+			// an earlier compatibility-mode revision after a strict-mode write or
+			// after a detached connection changes its storage location.
+			if _, e = tx.Exec(ctx, `DELETE FROM object_write_versions WHERE scope=$1`, c.ID); e != nil {
 				return e
 			}
 		}
