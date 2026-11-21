@@ -2,7 +2,9 @@ package app
 
 import (
 	"github.com/razzie-cloud/notes/internal/config"
+	"github.com/razzie-cloud/notes/internal/index"
 	"github.com/razzie-cloud/notes/internal/store"
+	"github.com/razzie-cloud/notes/internal/testutil"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -60,6 +62,39 @@ func TestAccountHeaderIdentityAndDestination(t *testing.T) {
 			}
 			if !tc.signed && !strings.Contains(header, "&lt;member&gt;") {
 				t.Fatal("missing escaped username")
+			}
+		})
+	}
+}
+
+func TestAccountHeaderUsesGatewayIssuerAcrossPages(t *testing.T) {
+	pool := testutil.Database(t)
+	fixture, cfg := testutil.ObjectStore(t)
+	cfg.LandingOrigin = "https://home.razzie.cloud"
+	gateway, sign := sharedGateway(t, cfg.Origin)
+	cfg.AccessGatewayURL = gateway
+	registry, book := testutil.Attach(t, pool, fixture, cfg, testutil.Owner, "account-header", false, "")
+	engine, err := index.New(pool, registry, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := New(cfg, engine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := server.Handler()
+	for _, route := range []string{"/", "/tags?notebook=" + book.ID, "/edit?notebook=" + book.ID, "/storage", "/notebooks", "/storage?notebook=" + book.ID} {
+		t.Run(route, func(t *testing.T) {
+			r := httptest.NewRequest("GET", cfg.Origin+route, nil)
+			sign(r, testutil.Owner, false)
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, r)
+			if w.Code != 200 {
+				t.Fatalf("status %d: %s", w.Code, w.Body.String())
+			}
+			header := strings.Split(w.Body.String(), "</header>")[0]
+			if !strings.Contains(header, `class="account-link" href="https://auth.example/"`) {
+				t.Fatal("account link must use the discovered gateway issuer:", header)
 			}
 		})
 	}

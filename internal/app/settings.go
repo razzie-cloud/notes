@@ -54,7 +54,7 @@ func (a *App) notebook(fn func(*App, http.ResponseWriter, *http.Request)) http.H
 			a.fail(w, r, e)
 			return
 		}
-		child := &App{Config: a.Config, Engine: bound, Repo: a.Repo, templates: a.templates, Notebook: n, Notebooks: books, Writable: n.Writable(c)}
+		child := &App{identityVerifier: a.identityVerifier, Config: a.Config, Engine: bound, Repo: a.Repo, templates: a.templates, Notebook: n, Notebooks: books, Writable: n.Writable(c)}
 		if r.Method != "GET" && r.Method != "HEAD" && !child.Writable && !strings.HasPrefix(r.URL.Path, "/v1/admin/") {
 			a.fail(w, r, store.ErrReadOnly)
 			return
@@ -109,7 +109,7 @@ func (a *App) renderStorage(w http.ResponseWriter, r *http.Request, v View, book
 		}
 		return
 	}
-	child := &App{Config: a.Config, Engine: a.Engine, Repo: a.Repo, templates: a.templates, Notebooks: books}
+	child := &App{identityVerifier: a.identityVerifier, Config: a.Config, Engine: a.Engine, Repo: a.Repo, templates: a.templates, Notebooks: books}
 	child.render(w, r, v, 200)
 }
 func form(w http.ResponseWriter, r *http.Request) bool {
@@ -440,7 +440,7 @@ func (a *App) renderNotebooks(w http.ResponseWriter, r *http.Request, v View, bo
 		}
 		return
 	}
-	child := &App{Config: a.Config, Engine: a.Engine, Repo: a.Repo, templates: a.templates, Notebooks: books}
+	child := &App{identityVerifier: a.identityVerifier, Config: a.Config, Engine: a.Engine, Repo: a.Repo, templates: a.templates, Notebooks: books}
 	child.render(w, r, v, http.StatusOK)
 }
 
